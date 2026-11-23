@@ -1,0 +1,55 @@
+{
+  "name": "alphamatte-lab",
+  "version": "1.0.0",
+  "description": "Ultra-fast SOTA alpha matting engine and web studio for photos, GIF, and video (WebM Alpha)",
+  "type": "module",
+  "author": "VovanBloger",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VovanBloger/alphamatte-lab.git"
+  },
+  "keywords": [
+    "alpha-matting",
+    "background-removal",
+    "chromakey",
+    "transparent-webm",
+    "vp9-alpha",
+    "telegram-stickers",
+    "guided-filter",
+    "image-processing",
+    "video-matting"
+  ],
+  "main": "sheet-processor/v53-matting.mjs",
+  "exports": {
+    ".": "./sheet-processor/v53-matting.mjs",
+    "./video": "./sheet-processor/video-matting.mjs",
+    "./processor": "./sheet-processor/index.mjs"
+  },
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test sheet-processor/test/processor.test.mjs sheet-processor/test/realism-regression.test.mjs sheet-processor/test/component-seams-regression.test.mjs sheet-processor/test/v53-matting.test.mjs",
+    "bench": "node scripts/benchmark-compare.mjs",
+    "video-matte": "node scripts/video-matting-cli.mjs",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0"
+  }
+}
