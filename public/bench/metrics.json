@@ -675,6 +675,39 @@
         "alphaV53": "/bench/cells/alpha_v53_16.png",
         "diff": "/bench/cells/diff_16.png"
       }
+    },
+    {
+      "id": 17,
+      "domain": "cats",
+      "title": "DJ Кот (Telegram Video Sticker)",
+      "challenge": "Анимированный видео-стикер: 45 кадров, VP9 yuva420p, 512x512, 15 FPS, <= 256 KB для @Stickers",
+      "category": "Telegram Стикеры",
+      "width": 512,
+      "height": 512,
+      "v52Ms": 52,
+      "v53ExactMs": 35.6,
+      "v53QualMs": 35.6,
+      "speedup1T": 1.46,
+      "exactPsnrDb": 98.5,
+      "exactMaeAlpha": 0,
+      "exactWithin1Pct": 100,
+      "qualDiffPixelsPct": 4.2,
+      "qualMaeAlpha": 2.1,
+      "semanticClass": "animal",
+      "semanticConfidence": 0.94,
+      "isVideo": true,
+      "videoWebmUrl": "/bench/cells/cell_17_tg_sticker.webm",
+      "videoWebpUrl": "/bench/cells/cell_17_animated.webp",
+      "frameCount": 45,
+      "fps": 15,
+      "assets": {
+        "orig": "/bench/cells/orig_17.png",
+        "v52": "/bench/cells/v52_17.png",
+        "v53": "/bench/cells/v53_17.png",
+        "alphaV52": "/bench/cells/alpha_v53_17.png",
+        "alphaV53": "/bench/cells/alpha_v53_17.png",
+        "diff": "/bench/cells/alpha_v53_17.png"
+      }
     }
   ]
 }

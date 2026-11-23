@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { BackdropMode, CellMetric, ComparisonMode } from '../types/bench';
 import { filterCellsByCategory } from '../utils/telemetryMath';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 interface ControlSidebarProps {
   cells: CellMetric[];
@@ -49,6 +50,7 @@ const BACKDROPS: Array<{ id: BackdropMode; label: string; swatchClass: string }>
 
 const CATEGORIES = [
   'Все',
+  'Telegram Стикеры',
   'Люди: волосы',
   'Мои фото',
   'Шерсть и усы',
@@ -366,7 +368,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
                   }`}
                 >
                   <img
-                    src={cell.assets.orig}
+                    src={resolveAssetUrl(cell.assets.orig)}
                     alt={cell.title}
                     referrerPolicy="no-referrer"
                     className="w-10 h-10 rounded object-cover shrink-0 border border-slate-700/80 bg-slate-800"

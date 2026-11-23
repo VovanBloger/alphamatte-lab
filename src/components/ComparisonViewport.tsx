@@ -6,6 +6,7 @@ import {
   getComparisonImageSources,
   getComparisonLabels,
 } from '../utils/telemetryMath';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 interface ComparisonViewportProps {
   selectedCell: CellMetric | null;
@@ -60,27 +61,27 @@ export const ComparisonViewport: React.FC<ComparisonViewportProps> = ({
 
   const labels = getComparisonLabels(comparisonMode);
 
-  let leftSrc = '/assets/aistudio/sheet_0790b517.jpg';
-  let rightSrc = '/bench/v53/preview.png';
+  let leftSrc = resolveAssetUrl('/assets/aistudio/sheet_0790b517.jpg');
+  let rightSrc = resolveAssetUrl('/bench/v53/preview.png');
 
   if (isSheetView) {
     if (comparisonMode === 'orig_vs_v53') {
-      leftSrc = '/assets/aistudio/sheet_0790b517.jpg';
-      rightSrc = '/bench/v53/preview.png';
+      leftSrc = resolveAssetUrl('/assets/aistudio/sheet_0790b517.jpg');
+      rightSrc = resolveAssetUrl('/bench/v53/preview.png');
     } else if (comparisonMode === 'v52_vs_v53') {
-      leftSrc = '/bench/v52/preview.png';
-      rightSrc = '/bench/v53/preview.png';
+      leftSrc = resolveAssetUrl('/bench/v52/preview.png');
+      rightSrc = resolveAssetUrl('/bench/v53/preview.png');
     } else if (comparisonMode === 'alpha_v52_vs_v53') {
-      leftSrc = '/bench/v52/alpha-mask.png';
-      rightSrc = '/bench/v53/alpha-mask.png';
+      leftSrc = resolveAssetUrl('/bench/v52/alpha-mask.png');
+      rightSrc = resolveAssetUrl('/bench/v53/alpha-mask.png');
     } else {
-      leftSrc = '/bench/v53/alpha-mask.png';
-      rightSrc = '/bench/v53/preview.png';
+      leftSrc = resolveAssetUrl('/bench/v53/alpha-mask.png');
+      rightSrc = resolveAssetUrl('/bench/v53/preview.png');
     }
   } else if (selectedCell) {
     const srcs = getComparisonImageSources(selectedCell, comparisonMode);
-    leftSrc = srcs.leftSrc;
-    rightSrc = srcs.rightSrc;
+    leftSrc = resolveAssetUrl(srcs.leftSrc);
+    rightSrc = resolveAssetUrl(srcs.rightSrc);
   }
 
   const updateSplitFromClientX = (clientX: number) => {
@@ -229,23 +230,34 @@ export const ComparisonViewport: React.FC<ComparisonViewportProps> = ({
             )}
             {selectedCell.isVideo && selectedCell.videoWebmUrl && (
               <a
-                href={selectedCell.videoWebmUrl}
-                download={`${selectedCell.title.replace(/\s+/g, '_')}_transparent.webm`}
+                href={resolveAssetUrl(selectedCell.videoWebmUrl)}
+                download={`${selectedCell.title.replace(/\s+/g, '_')}_tg_sticker.webm`}
                 className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded border border-emerald-500/60 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 font-sans text-[11px] font-medium transition-colors whitespace-nowrap"
-                title="Скачать прозрачное видео WebM (VP9 Alpha)"
+                title="Скачать Telegram Video Sticker (512x512, VP9 Alpha yuva420p, <=256KB)"
               >
                 <Download className="w-3 h-3" aria-hidden="true" />
-                WebM Alpha ({selectedCell.frameCount} к.)
+                WebM (TG Sticker)
+              </a>
+            )}
+            {selectedCell.isVideo && selectedCell.videoWebpUrl && (
+              <a
+                href={resolveAssetUrl(selectedCell.videoWebpUrl)}
+                download={`${selectedCell.title.replace(/\s+/g, '_')}_animated.webp`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-sky-500/60 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-sans text-[11px] font-medium transition-colors whitespace-nowrap"
+                title="Скачать анимированный WebP с прозрачностью"
+              >
+                <Download className="w-3 h-3" aria-hidden="true" />
+                WebP (Анимация)
               </a>
             )}
             <a
-              href={selectedCell.assets.v53}
-              download={`${selectedCell.title.replace(/\s+/g, '_')}_v53.png`}
-              className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded border border-slate-700 bg-slate-900 hover:border-sky-500/60 hover:text-sky-200 text-slate-200 font-sans text-[11px] transition-colors whitespace-nowrap"
-              title="Скачать прозрачный PNG (v5.3)"
+              href={resolveAssetUrl(selectedCell.assets.v53)}
+              download={`${selectedCell.title.replace(/\s+/g, '_')}_${selectedCell.isVideo ? 'poster' : 'v53'}.png`}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-slate-700 bg-slate-900 hover:border-slate-500 hover:text-slate-100 text-slate-300 font-sans text-[11px] transition-colors whitespace-nowrap"
+              title={selectedCell.isVideo ? "Скачать прозрачный PNG постер" : "Скачать прозрачный PNG (v5.3)"}
             >
               <Download className="w-3 h-3" aria-hidden="true" />
-              PNG v5.3
+              PNG {selectedCell.isVideo ? 'Постер' : 'v5.3'}
             </a>
           </div>
         )}
@@ -274,7 +286,7 @@ export const ComparisonViewport: React.FC<ComparisonViewportProps> = ({
             selectedCell.videoWebmUrl &&
             (comparisonMode === 'orig_vs_v53' || comparisonMode === 'v52_vs_v53') ? (
               <video
-                src={selectedCell.videoWebmUrl}
+                src={resolveAssetUrl(selectedCell.videoWebmUrl)}
                 autoPlay
                 loop
                 muted

@@ -65,6 +65,8 @@ export interface CellMetric {
   isCustom?: boolean;
   isVideo?: boolean;
   videoWebmUrl?: string;
+  videoWebpUrl?: string;
+  posterPngUrl?: string;
   origVideoUrl?: string;
   frameCount?: number;
   fps?: number;

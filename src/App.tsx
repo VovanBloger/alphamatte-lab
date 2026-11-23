@@ -16,6 +16,8 @@ import type {
   TelemetryTab,
 } from './types/bench';
 
+import { resolveAssetUrl } from './utils/assetUrl';
+
 export default function App() {
   const [metrics, setMetrics] = useState<BenchMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    fetch('/bench/metrics.json')
+    fetch(resolveAssetUrl('bench/metrics.json'))
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<BenchMetrics>;
