@@ -70,6 +70,8 @@ export interface CellMetric {
   origVideoUrl?: string;
   frameCount?: number;
   fps?: number;
+  rawFrames?: Uint8ClampedArray[];
+  mattedFrames?: Uint8ClampedArray[];
   assets: CellAssets;
 }
 

@@ -28,6 +28,12 @@ export interface FeaturedItem {
   original: string;
   processed: string;
   isVideo?: boolean;
+  isGif?: boolean;
+  rawFrames?: Uint8ClampedArray[];
+  mattedFrames?: Uint8ClampedArray[];
+  width?: number;
+  height?: number;
+  fps?: number;
   speedMs: number;
   badge: string;
   description: string;
@@ -134,20 +140,34 @@ export default function App() {
         : await processCustomPhotoFile(file, newId);
 
       const elapsed = Math.round(performance.now() - t0);
-      const isActuallyVideo = Boolean(cell.animatedWebmUrl);
+      const isActuallyVideo = Boolean(cell.isVideo);
+      const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+      const originalUrl = isActuallyVideo && cell.origVideoUrl ? cell.origVideoUrl : cell.assets.orig;
+      const processedUrl = isActuallyVideo && cell.videoWebmUrl ? cell.videoWebmUrl : cell.assets.v53;
+      const thumbUrl = cell.assets.v53;
 
       const customItem: FeaturedItem = {
         id: newId,
         title: file.name.replace(/\.[^/.]+$/, ''),
-        subtitle: isActuallyVideo ? 'Пользовательское видео' : 'Пользовательское фото',
+        subtitle: isActuallyVideo
+          ? (isGif ? 'Пользовательский GIF' : 'Пользовательское видео')
+          : 'Пользовательское фото',
         category: 'Моё фото',
-        thumb: cell.previewUrl,
-        original: cell.origUrl,
-        processed: isActuallyVideo ? (cell.animatedWebmUrl ?? cell.previewUrl) : cell.previewUrl,
+        thumb: thumbUrl,
+        original: originalUrl,
+        processed: processedUrl,
         isVideo: isActuallyVideo,
-        speedMs: cell.v53Ms > 0 ? cell.v53Ms : elapsed,
-        badge: `${cell.v53Ms > 0 ? cell.v53Ms : elapsed} мс`,
-        description: `Разрешение: ${cell.width}×${cell.height} px · Алгоритм v5.3 Turbo`,
+        isGif,
+        rawFrames: cell.rawFrames,
+        mattedFrames: cell.mattedFrames,
+        width: cell.width,
+        height: cell.height,
+        fps: cell.fps || 20,
+        speedMs: cell.v53QualMs > 0 ? Math.round(cell.v53QualMs) : (cell.v53Ms > 0 ? Math.round(cell.v53Ms) : elapsed),
+        badge: isActuallyVideo ? `${cell.frameCount || 1} кадров · ${cell.fps || 20} FPS` : `${elapsed} мс`,
+        description: isActuallyVideo
+          ? `Видео/GIF (${cell.frameCount || 1} кадров, ${cell.width}×${cell.height} px, ${cell.fps || 20} FPS)`
+          : `Разрешение: ${cell.width}×${cell.height} px · Алгоритм v5.3 Turbo`,
         downloadName: isActuallyVideo
           ? `${file.name.replace(/\.[^/.]+$/, '')}-sticker.webm`
           : `${file.name.replace(/\.[^/.]+$/, '')}-cutout.png`,
@@ -404,6 +424,12 @@ export default function App() {
                 originalSrc={selectedItem.original}
                 processedSrc={selectedItem.processed}
                 isVideo={selectedItem.isVideo}
+                isGif={selectedItem.isGif}
+                rawFrames={selectedItem.rawFrames}
+                mattedFrames={selectedItem.mattedFrames}
+                frameWidth={selectedItem.width}
+                frameHeight={selectedItem.height}
+                fps={selectedItem.fps}
                 altTitle={selectedItem.title}
                 backdrop={backdrop}
                 onChangeBackdrop={setBackdrop}

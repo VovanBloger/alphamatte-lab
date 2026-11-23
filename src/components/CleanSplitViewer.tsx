@@ -8,6 +8,12 @@ interface CleanSplitViewerProps {
   originalSrc: string;
   processedSrc: string;
   isVideo?: boolean;
+  isGif?: boolean;
+  rawFrames?: Uint8ClampedArray[];
+  mattedFrames?: Uint8ClampedArray[];
+  frameWidth?: number;
+  frameHeight?: number;
+  fps?: number;
   altTitle?: string;
   backdrop: BackdropColor;
   onChangeBackdrop: (bg: BackdropColor) => void;
@@ -17,6 +23,12 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
   originalSrc,
   processedSrc,
   isVideo = false,
+  isGif = false,
+  rawFrames,
+  mattedFrames,
+  frameWidth,
+  frameHeight,
+  fps = 20,
   altTitle = 'Сравнение',
   backdrop,
   onChangeBackdrop,
@@ -24,6 +36,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const leftVideoRef = useRef<HTMLVideoElement>(null);
   const rightVideoRef = useRef<HTMLVideoElement>(null);
+  const rightCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -37,13 +50,59 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
     origY: 0,
   });
 
-  // Sync video playbacks if in video mode
+  const hasCanvasFrames = Boolean(mattedFrames && mattedFrames.length > 0 && frameWidth && frameHeight);
+
+  // Canvas loop for custom video / GIF frames with 100% alpha transparency
   useEffect(() => {
-    if (!isVideo) return;
+    if (!hasCanvasFrames || !mattedFrames || !frameWidth || !frameHeight) return;
+    let animId: number;
+    let frameIdx = 0;
+    const interval = 1000 / fps;
+    let lastTime = performance.now();
+
+    const canvas = rightCanvasRef.current;
+    if (!canvas) return;
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const render = (now: number) => {
+      if (now - lastTime >= interval) {
+        lastTime = now;
+        const f = mattedFrames[frameIdx];
+        if (f) {
+          const imgData = new ImageData(
+            new Uint8ClampedArray(f.buffer, f.byteOffset, f.byteLength),
+            frameWidth,
+            frameHeight
+          );
+          ctx.putImageData(imgData, 0, 0);
+        }
+        frameIdx = (frameIdx + 1) % mattedFrames.length;
+      }
+      animId = requestAnimationFrame(render);
+    };
+
+    animId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animId);
+  }, [hasCanvasFrames, mattedFrames, frameWidth, frameHeight, fps]);
+
+  // Sync video playbacks if in video mode without canvas frames
+  useEffect(() => {
+    if (!isVideo || hasCanvasFrames) return;
     const v1 = leftVideoRef.current;
     const v2 = rightVideoRef.current;
-    if (!v1 || !v2) return;
+    if (v1) {
+      v1.currentTime = 0;
+      v1.play().catch(() => {});
+    }
+    if (v2) {
+      v2.currentTime = 0;
+      v2.play().catch(() => {});
+    }
 
+    if (!v1 || !v2) return;
     const syncVideos = () => {
       if (Math.abs(v1.currentTime - v2.currentTime) > 0.08) {
         v2.currentTime = v1.currentTime;
@@ -53,7 +112,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
     return () => {
       v1.removeEventListener('timeupdate', syncVideos);
     };
-  }, [isVideo, originalSrc, processedSrc]);
+  }, [isVideo, hasCanvasFrames, originalSrc, processedSrc]);
 
   const updateSplit = (clientX: number) => {
     const el = containerRef.current;
@@ -120,6 +179,9 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
     }
   };
 
+  const resolvedOrig = resolveAssetUrl(originalSrc);
+  const resolvedProcessed = resolveAssetUrl(processedSrc);
+
   return (
     <div className="flex flex-col items-center w-full max-w-4xl mx-auto">
       {/* Viewport Card */}
@@ -143,10 +205,15 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
         >
           {/* RIGHT SIDE: Processed / Cutout */}
           <div className={`absolute inset-0 w-full h-full ${getBackdropClass()}`}>
-            {isVideo ? (
+            {hasCanvasFrames ? (
+              <canvas
+                ref={rightCanvasRef}
+                className="w-full h-full object-contain pointer-events-none"
+              />
+            ) : isVideo ? (
               <video
                 ref={rightVideoRef}
-                src={resolveAssetUrl(processedSrc)}
+                src={resolvedProcessed}
                 autoPlay
                 loop
                 muted
@@ -155,7 +222,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
               />
             ) : (
               <img
-                src={resolveAssetUrl(processedSrc)}
+                src={resolvedProcessed}
                 alt={`${altTitle} без фона`}
                 className="w-full h-full object-contain pointer-events-none"
                 draggable={false}
@@ -172,10 +239,18 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
               className="absolute inset-0 h-full"
               style={{ width: containerRef.current ? `${containerRef.current.clientWidth}px` : '100%' }}
             >
-              {isVideo ? (
+              {isGif ? (
+                /* GIF must be rendered in <img> tag to play animation natively in all browsers */
+                <img
+                  src={resolvedOrig}
+                  alt={`${altTitle} оригинал`}
+                  className="w-full h-full object-contain pointer-events-none"
+                  draggable={false}
+                />
+              ) : isVideo ? (
                 <video
                   ref={leftVideoRef}
-                  src={resolveAssetUrl(originalSrc)}
+                  src={resolvedOrig}
                   autoPlay
                   loop
                   muted
@@ -184,7 +259,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
                 />
               ) : (
                 <img
-                  src={resolveAssetUrl(originalSrc)}
+                  src={resolvedOrig}
                   alt={`${altTitle} оригинал`}
                   className="w-full h-full object-contain pointer-events-none"
                   draggable={false}

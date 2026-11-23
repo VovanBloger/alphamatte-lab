@@ -380,6 +380,8 @@ export async function processCustomVideoOrGifFile(
     isVideo: true,
     videoWebmUrl: webmUrl,
     origVideoUrl,
+    rawFrames,
+    mattedFrames,
     frameCount: rawFrames.length,
     fps,
     v53QualMs: avgFrameMs,
