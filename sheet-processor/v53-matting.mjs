@@ -622,6 +622,9 @@ function stage0BackgroundCalibration(data, width, height, ws, qualityPlus) {
   const refBgB = medianArray(refSamplesB);
   const refBgLum = 0.299 * refBgR + 0.587 * refBgG + 0.114 * refBgB;
   const isMidToneBg = !isCustomBackdrop || (refBgLum >= 65 && refBgLum <= 205);
+  const isGreenChroma = (refBgG > 100 && refBgG > refBgR * 1.25 + 15 && refBgG > refBgB * 1.25 + 15);
+  const isBlueChroma = (refBgB > 100 && refBgB > refBgR * 1.25 + 15 && refBgB > refBgG * 1.25 + 15);
+  const isChromaBg = isGreenChroma || isBlueChroma;
 
   const quadR = [[], [], [], []], quadG = [[], [], [], []], quadB = [[], [], [], []];
   const halfH = height >> 1;
@@ -719,7 +722,12 @@ function stage0BackgroundCalibration(data, width, height, ws, qualityPlus) {
       lum[idx] = 0.299 * r + 0.587 * g + 0.114 * b;
 
       const sumD = dr + dg + db;
-      const satSq = distSq - sumD * sumD * 0.3333333333333333;
+      let satSq = distSq - sumD * sumD * 0.3333333333333333;
+      if (isChromaBg) {
+        const mRGB = (r + g + b) * 0.3333333333333333;
+        const mr = r - mRGB, mg = g - mRGB, mb = b - mRGB;
+        satSq = mr * mr + mg * mg + mb * mb;
+      }
       sat[idx] = satSq > 0 ? Math.sqrt(satSq) : 0;
 
       bR += rStep;
@@ -786,7 +794,7 @@ function stage0BackgroundCalibration(data, width, height, ws, qualityPlus) {
     : Math.max(13.5, Math.min(20.0, 9.5 + noiseStd * 2.2));
   const gapTol = coreBgTol + (isCustomBackdrop ? 5.0 : 11.0);
 
-  return { cR0, cR1, cR2, cR3, cG0, cG1, cG2, cG3, cB0, cB1, cB2, cB3, invW, invH, coreBgTol, gapTol, isMidToneBg, isCustomBackdrop };
+  return { cR0, cR1, cR2, cR3, cG0, cG1, cG2, cG3, cB0, cB1, cB2, cB3, invW, invH, coreBgTol, gapTol, isMidToneBg, isCustomBackdrop, isGreenChroma, isBlueChroma, isChromaBg };
 }
 
 function stage1SobelGradient(width, height, ws) {
@@ -826,7 +834,7 @@ function stage1SobelGradient(width, height, ws) {
   }
 }
 
-function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol, inwardFloodCap, clothOverexposureGuard, isCustomBackdrop = false) {
+function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol, inwardFloodCap, clothOverexposureGuard, isCustomBackdrop = false, isChromaBg = false) {
   const { bgState, distToBg, queue, lum, bgLum, sat, grad, localTexture, localTextureClamped, hw, hh } = ws;
   bgState.fill(0);
   let head = 0, tail = 0;
@@ -836,7 +844,7 @@ function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol,
   const trySeedExact = (x, y) => {
     const idx = y * width + x;
     if (bgState[idx] === 0 && distToBg[idx] <= coreBgTol) {
-      if (isCustomBackdrop && sat[idx] >= 7.5) return;
+      if (isCustomBackdrop && !isChromaBg && sat[idx] >= 7.5) return;
       if (clothOverexposureGuard && sat[idx] >= 3.2 && distToBg[idx] >= 4.5 && (y >= torsoY || localTextureClamped[idx] >= 2.0)) return;
       bgState[idx] = 1;
       queue[tail++] = (y << 16) | x;
@@ -905,10 +913,10 @@ function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol,
       const inOuter = nx < 24 || nx >= marginXHi || ny < 24 || ny >= marginYHi;
       const blockClothVapor = clothOverexposureGuard && ny >= torsoY && texC >= 1.9 && sVal >= 2.1;
 
-      if (d <= coreBgTol && (!isCustomBackdrop || sVal < 7.5)) {
+      if (d <= coreBgTol && (!isCustomBackdrop || isChromaBg || sVal < 7.5)) {
         bgState[nIdx] = (!isCustomBackdrop && !inOuter && !blockClothVapor && lDiff > 9.0 && sVal < 16 && grad[nIdx] < 9.5 && localTexture[nIdx] >= 2.2) ? 2 : 1;
         queue[tail++] = (ny << 16) | nx;
-      } else if (d <= gapTol && grad[nIdx] < 13.5 && sVal < (isCustomBackdrop ? 8.5 : 14)) {
+      } else if (d <= gapTol && grad[nIdx] < 13.5 && (isChromaBg || sVal < (isCustomBackdrop ? 8.5 : 14))) {
         bgState[nIdx] = (!isCustomBackdrop && !inOuter && !blockClothVapor && lDiff > 8.5 && localTexture[nIdx] >= 2.2) ? 2 : 3;
         queue[tail++] = (ny << 16) | nx;
       }
@@ -916,7 +924,7 @@ function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol,
   }
 }
 
-function stage2ExteriorFloodQuality(width, height, ws, hInward, coreBgTol, gapTol, inwardFloodCap, clothOverexposureGuard) {
+function stage2ExteriorFloodQuality(width, height, ws, hInward, coreBgTol, gapTol, inwardFloodCap, clothOverexposureGuard, isChromaBg = false) {
   const { bgState, distToBg, queue, lum, bgLum, sat, grad, localTexture, localTextureClamped, hw, hh } = ws;
   bgState.fill(0);
   let head = 0, tail = 0;
@@ -926,9 +934,9 @@ function stage2ExteriorFloodQuality(width, height, ws, hInward, coreBgTol, gapTo
     const d = distToBg[idx];
     const s = sat[idx];
     const texC = localTextureClamped[idx];
-    if (d <= coreBgTol && s <= 3.5 && texC < 2.0) return true;
+    if (d <= coreBgTol && (isChromaBg || s <= 3.5) && texC < 2.0) return true;
     // Also seed glass-smooth neutral studio vignette corners (e.g. bottom corners beside clothing)
-    if (d <= 54.0 && s <= 3.0 && texC <= 1.85 && grad[idx] <= 4.0) return true;
+    if (!isChromaBg && d <= 54.0 && s <= 3.0 && texC <= 1.85 && grad[idx] <= 4.0) return true;
     return false;
   };
 
@@ -1036,7 +1044,7 @@ function stage2ExteriorFloodQuality(width, height, ws, hInward, coreBgTol, gapTo
         const inOuter = nx < 24 || nx >= marginXHi || ny < 24 || ny >= marginYHi;
         bgState[nIdx] = (!inOuter && !isSmoothVignette && !isNeutralStudioGlow && !blockClothVapor && lDiff > vaporLumThresh && s < 16 && gVal < 9.5 && tex >= vaporTexThresh) ? 2 : 1;
         queue[tail++] = (ny << 16) | nx;
-      } else if (d <= gapTol && gVal < 13.5 && s < 11) {
+      } else if (d <= gapTol && gVal < 13.5 && (isChromaBg || s < 11)) {
         if (Math.abs(lDiff) > 6.5 && gVal > 6.8 && gVal > tex * 1.65) continue;
         if (parentState === 3 && (inD >= 6 || d > gapCoreTol || s >= 8.0)) continue;
         if (clothOverexposureGuard && ny >= torsoY && texC >= 2.6 && s >= 2.6) continue;
@@ -1141,12 +1149,12 @@ function stage2BStripBorderArtifacts(width, height, ws) {
   }
 }
 
-function stage3ExteriorPockets(width, height, ws, hInward, coreBgTol, gapTol, qualityPlus, inwardPocketCap, inwardFloodCap, clothOverexposureGuard) {
+function stage3ExteriorPockets(width, height, ws, hInward, coreBgTol, gapTol, qualityPlus, inwardPocketCap, inwardFloodCap, clothOverexposureGuard, isChromaBg = false) {
   const { bgState, visited, distToBg, sat, grad, lum, bgLum, localTexture, localTextureClamped, queue, hw, hh } = ws;
   visited.fill(0);
   const pocketTol = coreBgTol + 9.5;
   const strictHumanPockets = clothOverexposureGuard;
-  const maxSatPocket = strictHumanPockets ? (qualityPlus ? 2.8 : 3.2) : 14.0;
+  const maxSatPocket = isChromaBg ? 255.0 : (strictHumanPockets ? (qualityPlus ? 2.8 : 3.2) : 14.0);
   const maxTexPocket = strictHumanPockets ? (qualityPlus ? 2.2 : 2.4) : 4.2;
   const maxMeanTex = strictHumanPockets ? (qualityPlus ? 2.1 : 2.2) : 3.4;
   const pocketSeeds = [];
@@ -1719,15 +1727,34 @@ function stage6UnmixExact(data, width, height, ws, hInward, bgPlane, furCaptureD
           const unmixA = alpha < 0.20 ? 0.20 : alpha > 1.0 ? 1.0 : alpha;
           const invUA = 1 / unmixA;
           const oneMinus = 1 - unmixA;
-          const uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
-          const uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
-          const uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
+          let uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
+          let uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
+          let uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
+
+          if (bgPlane.isGreenChroma) {
+            const maxNonGreen = Math.max(uR, uB);
+            if (uG > maxNonGreen) {
+              uG = (maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25);
+            }
+          } else if (bgPlane.isBlueChroma) {
+            const maxNonBlue = Math.max(uR, uG);
+            if (uB > maxNonBlue) {
+              uB = (maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25);
+            }
+          }
+
           const w = isProtectedHumanCloth
             ? (ring <= 2 ? 0.60 : 0.0)
             : ring <= 3 ? 0.92 : Math.max(0, ((furCaptureDepth + 1) - ring) * invUnmixSpan) * 0.70;
           outR = r + (uR - r) * w;
           outG = g + (uG - g) * w;
           outB = b + (uB - b) * w;
+          if (bgPlane.isGreenChroma) {
+            const mNG = Math.max(outR, outB);
+            if (outG > mNG) {
+              outG = (mNG * 0.75 + ((outR + outB) * 0.5) * 0.25);
+            }
+          }
           modified = true;
         }
       }
@@ -1933,7 +1960,9 @@ function stage6UnmixQuality(data, width, height, ws, hInward, bgPlane, furRing, 
         const distA = smoothstep(coreBgTol * 0.5, coreBgTol + 22, d);
         // Only genuinely protected human clothing (torso zone) locks solid silhouette — never outer animal fur tips!
         const isSolidClothBorder = isProtectedHumanCloth && (ring <= edgeProtectRadius || (sVal >= 3.2 && d >= 4.5));
-        const isBgLikeFringe = d <= coreBgTol + 12 && sVal < 3.5;
+        const isBgLikeFringe = bgPlane.isGreenChroma
+          ? (d <= coreBgTol + 16 || (g > Math.max(r, b) + 8 && d <= coreBgTol + 26))
+          : (d <= coreBgTol + 12 && sVal < 3.5);
 
         if (state === 3) {
           alpha = Math.min(projA, distA) * smoothstep(coreBgTol * 0.45, gapTol + 3, d);
@@ -1958,9 +1987,21 @@ function stage6UnmixQuality(data, width, height, ws, hInward, bgPlane, furRing, 
           const unmixA = alpha < 0.22 ? 0.22 : alpha > 1.0 ? 1.0 : alpha;
           const invUA = 1 / unmixA;
           const oneMinus = 1 - unmixA;
-          const uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
-          const uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
-          const uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
+          let uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
+          let uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
+          let uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
+
+          if (bgPlane.isGreenChroma) {
+            const maxNonGreen = Math.max(uR, uB);
+            if (uG > maxNonGreen) {
+              uG = (maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25);
+            }
+          } else if (bgPlane.isBlueChroma) {
+            const maxNonBlue = Math.max(uR, uG);
+            if (uB > maxNonBlue) {
+              uB = (maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25);
+            }
+          }
 
           let decR = uR, decG = uG, decB = uB;
           if (hasPrior) {
@@ -1978,6 +2019,12 @@ function stage6UnmixQuality(data, width, height, ws, hInward, bgPlane, furRing, 
             decR = uR + (fgR - uR) * priorW;
             decG = uG + (fgG - uG) * priorW;
             decB = uB + (fgB - uB) * priorW;
+            if (bgPlane.isGreenChroma) {
+              const mNG = Math.max(decR, decB);
+              if (decG > mNG) {
+                decG = (mNG * 0.75 + ((decR + decB) * 0.5) * 0.25);
+              }
+            }
           }
 
           const w = isSolidClothBorder
@@ -1987,6 +2034,12 @@ function stage6UnmixQuality(data, width, height, ws, hInward, bgPlane, furRing, 
             outR = r + (decR - r) * w;
             outG = g + (decG - g) * w;
             outB = b + (decB - b) * w;
+            if (bgPlane.isGreenChroma) {
+              const mNG = Math.max(outR, outB);
+              if (outG > mNG) {
+                outG = (mNG * 0.75 + ((outR + outB) * 0.5) * 0.25);
+              }
+            }
             modified = true;
           }
         } else if (hasPrior && (ring <= 3 || isTrappedHairWeb)) {
@@ -2404,7 +2457,10 @@ export function stage6CTextureRecovery(data, width, height, ws, maxHairRing, dia
   return recoveredPixels;
 }
 
-function stage7GuidedFilter(data, width, height, ws, coreBgTol, qualityPlus) {
+function stage7GuidedFilter(data, width, height, ws, bgPlaneOrTol, qualityPlus) {
+  const coreBgTol = typeof bgPlaneOrTol === 'object' ? bgPlaneOrTol.coreBgTol : bgPlaneOrTol;
+  const isGreenChroma = typeof bgPlaneOrTol === 'object' ? !!bgPlaneOrTol.isGreenChroma : false;
+  const isBlueChroma = typeof bgPlaneOrTol === 'object' ? !!bgPlaneOrTol.isBlueChroma : false;
   const { total, hw, hh, hTotal, distToBg, rawAlpha, bgState, distFromBg, visited: rgbModified, pureR, pureG, pureB, grad, hSubI, hSubP, hTmp0, hTmp1, hTmp2, hTmp3, hColSum0, hColSum1, hColSum2, hColSum3, hBufA, hBufB, hBufC, hBufD } = ws;
   const maxHx = hw - 1;
   const maxHy = hh - 1;
@@ -2479,6 +2535,23 @@ function stage7GuidedFilter(data, width, height, ws, coreBgTol, qualityPlus) {
           data[off + 1] = pureG[idx];
           data[off + 2] = pureB[idx];
         }
+        if (isGreenChroma && distFromBg[idx] <= 16) {
+          const curR = data[off];
+          const curG = data[off + 1];
+          const curB = data[off + 2];
+          const maxNonG = Math.max(curR, curB);
+          if (curG > maxNonG) {
+            data[off + 1] = (maxNonG * 0.75 + ((curR + curB) >> 1) * 0.25) | 0;
+          }
+        } else if (isBlueChroma && distFromBg[idx] <= 16) {
+          const curR = data[off];
+          const curG = data[off + 1];
+          const curB = data[off + 2];
+          const maxNonB = Math.max(curR, curG);
+          if (curB > maxNonB) {
+            data[off + 2] = (maxNonB * 0.75 + ((curR + curG) >> 1) * 0.25) | 0;
+          }
+        }
         data[off + 3] = 255;
         continue;
       }
@@ -2517,6 +2590,23 @@ function stage7GuidedFilter(data, width, height, ws, coreBgTol, qualityPlus) {
           data[off] = pureR[idx];
           data[off + 1] = pureG[idx];
           data[off + 2] = pureB[idx];
+        }
+        if (isGreenChroma && distFromBg[idx] <= 16) {
+          const curR = data[off];
+          const curG = data[off + 1];
+          const curB = data[off + 2];
+          const maxNonG = Math.max(curR, curB);
+          if (curG > maxNonG) {
+            data[off + 1] = (maxNonG * 0.75 + ((curR + curB) >> 1) * 0.25) | 0;
+          }
+        } else if (isBlueChroma && distFromBg[idx] <= 16) {
+          const curR = data[off];
+          const curG = data[off + 1];
+          const curB = data[off + 2];
+          const maxNonB = Math.max(curR, curG);
+          if (curB > maxNonB) {
+            data[off + 2] = (maxNonB * 0.75 + ((curR + curG) >> 1) * 0.25) | 0;
+          }
         }
         data[off + 3] = a >= 1 ? 255 : (a * 255 + 0.5) | 0;
       }
@@ -2690,10 +2780,10 @@ export function sotaCellMattingV5_3_Turbo(rgba, width, height, opts = {}) {
   if (st) st.stage1b_inward += (t1b - t1Box);
 
   if (useHumanVignettePipeline) {
-    stage2ExteriorFloodQuality(width, height, ws, hInward, bgPlane.coreBgTol, bgPlane.gapTol, qFloodCap, clothOverexposureGuard);
+    stage2ExteriorFloodQuality(width, height, ws, hInward, bgPlane.coreBgTol, bgPlane.gapTol, qFloodCap, clothOverexposureGuard, bgPlane.isChromaBg);
     stage2BStripBorderArtifacts(width, height, ws);
   } else {
-    stage2ExteriorFloodExact(width, height, ws, hInward, bgPlane.coreBgTol, bgPlane.gapTol, exactFloodCap, clothOverexposureGuard, bgPlane.isCustomBackdrop);
+    stage2ExteriorFloodExact(width, height, ws, hInward, bgPlane.coreBgTol, bgPlane.gapTol, exactFloodCap, clothOverexposureGuard, bgPlane.isCustomBackdrop, bgPlane.isChromaBg);
     if (qualityPlus) {
       stage2BStripBorderArtifacts(width, height, ws);
     }
@@ -2705,7 +2795,8 @@ export function sotaCellMattingV5_3_Turbo(rgba, width, height, opts = {}) {
     width, height, ws, hInward, bgPlane.coreBgTol, bgPlane.gapTol, useHumanVignettePipeline,
     useHumanVignettePipeline ? qPocketCap : exactPocketCap,
     useHumanVignettePipeline ? qFloodCap : exactFloodCap,
-    clothOverexposureGuard
+    clothOverexposureGuard,
+    bgPlane.isChromaBg
   );
   if (useHumanVignettePipeline) {
     stage3BHairMicroGaps(width, height, ws, hInward, bgPlane.coreBgTol, qHairGapCap);
@@ -2740,7 +2831,7 @@ export function sotaCellMattingV5_3_Turbo(rgba, width, height, opts = {}) {
     st.stage6_texture_recovery += (t6c - t6);
   }
 
-  stage7GuidedFilter(data, width, height, ws, bgPlane.coreBgTol, useHumanVignettePipeline);
+  stage7GuidedFilter(data, width, height, ws, bgPlane, useHumanVignettePipeline);
   if (qualityPlus && despeckleEnabled) {
     stage7BDespeckleCleanup(data, width, height, ws, bgPlane.coreBgTol, diagnostics);
   } else if (diagnostics) {

@@ -349,4 +349,79 @@ test('smooth pastel solid objects stay 100% opaque in both upper and lower frame
   assert.equal(out[(132 * w + 60) * 4 + 3], 255, 'lower pastel mug interior must stay solid');
 });
 
+test('green chromakey cuts cleanly with green de-spill on fur fringe while preserving interior green eyes', () => {
+  const w = 160, h = 160;
+  const rgba = new Uint8ClampedArray(w * h * 4);
+
+  // Background: vibrant green chromakey #00E600
+  for (let i = 0; i < w * h; i++) {
+    const off = i * 4;
+    rgba[off] = 10;
+    rgba[off + 1] = 230;
+    rgba[off + 2] = 15;
+    rgba[off + 3] = 255;
+  }
+
+  // Gray cartoon cat body (radius 40 centered at 80, 80)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = x - 80, dy = y - 80;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const off = (y * w + x) * 4;
+      if (d <= 36) {
+        // Solid cat body: gray fur
+        rgba[off] = 110;
+        rgba[off + 1] = 112;
+        rgba[off + 2] = 116;
+      } else if (d <= 42) {
+        // Optical green spill & antialiased fur fringe: blend of gray fur and green background
+        const t = (d - 36) / 6;
+        rgba[off] = Math.round(110 * (1 - t) + 10 * t);
+        // Excess green spill from bright screen reflection
+        rgba[off + 1] = Math.round(112 * (1 - t) + 230 * t);
+        rgba[off + 2] = Math.round(116 * (1 - t) + 15 * t);
+      }
+    }
+  }
+
+  // Interior green eyes (located inside face at dx = -14, dy = -6 and dx = 14, dy = -6)
+  for (const [ex, ey] of [[66, 74], [94, 74]]) {
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (dx * dx + dy * dy <= 9) {
+          const off = ((ey + dy) * w + (ex + dx)) * 4;
+          rgba[off] = 20;
+          rgba[off + 1] = 210;
+          rgba[off + 2] = 60;
+        }
+      }
+    }
+  }
+
+  const out = sotaCellMattingV5_3_Turbo(rgba, w, h, { qualityEnhancements: true });
+
+  // 1. Background is cleared
+  assert.equal(out[(6 * w + 6) * 4 + 3], 0, 'outer green background must be transparent');
+
+  // 2. Interior green eyes stay 100% solid and preserve their green hue!
+  const eyeAlpha = out[(74 * w + 66) * 4 + 3];
+  const eyeG = out[(74 * w + 66) * 4 + 1];
+  assert.equal(eyeAlpha, 255, 'interior green eyes must remain 100% solid');
+  assert.ok(eyeG >= 180, `interior green eye hue must stay vibrant green, got G=${eyeG}`);
+
+  // 3. Fur edge around d=38 must have green spill suppressed!
+  // At (80, 118) which is d=38:
+  const edgeOff = (118 * w + 80) * 4;
+  const edgeA = out[edgeOff + 3];
+  const edgeR = out[edgeOff];
+  const edgeG = out[edgeOff + 1];
+  const edgeB = out[edgeOff + 2];
+
+  if (edgeA > 0) {
+    const maxNonGreen = Math.max(edgeR, edgeB);
+    // Green spill must be neutralized: G must not exceed max(R, B) by more than 2
+    assert.ok(edgeG <= maxNonGreen + 2, `expected edge green spill to be suppressed, got R=${edgeR}, G=${edgeG}, B=${edgeB}`);
+  }
+});
+
 
