@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { MoveHorizontal, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { resolveAssetUrl } from '../utils/assetUrl';
+import { generateCssStickerFilter, type StickerEffects } from '../utils/telegramStickerExport';
 
 export type BackdropColor = 'checker' | 'dark' | 'white' | 'green';
 
@@ -17,6 +18,7 @@ interface CleanSplitViewerProps {
   altTitle?: string;
   backdrop: BackdropColor;
   onChangeBackdrop: (bg: BackdropColor) => void;
+  stickerEffects?: StickerEffects;
 }
 
 export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
@@ -32,6 +34,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
   altTitle = 'Сравнение',
   backdrop,
   onChangeBackdrop,
+  stickerEffects,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const leftVideoRef = useRef<HTMLVideoElement>(null);
@@ -228,7 +231,8 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
             {hasCanvasFrames ? (
               <canvas
                 ref={rightCanvasRef}
-                className="w-full h-full object-contain pointer-events-none"
+                style={{ filter: stickerEffects ? generateCssStickerFilter(stickerEffects) : 'none' }}
+                className="w-full h-full object-contain pointer-events-none transition-[filter] duration-150"
               />
             ) : isVideo ? (
               <video
@@ -239,14 +243,16 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
                 muted
                 playsInline
                 onLoadedMetadata={handleMediaLoad}
-                className="w-full h-full object-contain pointer-events-none"
+                style={{ filter: stickerEffects ? generateCssStickerFilter(stickerEffects) : 'none' }}
+                className="w-full h-full object-contain pointer-events-none transition-[filter] duration-150"
               />
             ) : (
               <img
                 src={resolvedProcessed}
                 alt={`${altTitle} без фона`}
                 onLoad={handleMediaLoad}
-                className="w-full h-full object-contain pointer-events-none"
+                style={{ filter: stickerEffects ? generateCssStickerFilter(stickerEffects) : 'none' }}
+                className="w-full h-full object-contain pointer-events-none transition-[filter] duration-150"
                 draggable={false}
               />
             )}

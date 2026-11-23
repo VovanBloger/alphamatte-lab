@@ -20,7 +20,10 @@ import {
 import { resolveAssetUrl } from './utils/assetUrl';
 import {
   createTelegramWebpStickerBlob,
+  createHdCutoutBlob,
   triggerBlobDownload,
+  type StickerEffects,
+  DEFAULT_STICKER_EFFECTS,
 } from './utils/telegramStickerExport';
 
 export interface FeaturedItem {
@@ -111,6 +114,7 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingStatus, setProcessingStatus] = useState<string>('Обработка...');
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [stickerEffects, setStickerEffects] = useState<StickerEffects>(DEFAULT_STICKER_EFFECTS);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
@@ -234,7 +238,8 @@ export default function App() {
 
         const res = await createTelegramWebpStickerBlob(
           source,
-          item.downloadName || item.title
+          item.downloadName || item.title,
+          stickerEffects
         );
         triggerBlobDownload(res.blob, res.filename);
 
@@ -260,20 +265,44 @@ export default function App() {
           message: `Видео-стикер Telegram готов: ${cleanBase}-tg-sticker.webm (VP9, без звука, ≤ 256 КБ) — готов для @Stickers!`,
         });
       } else {
-        // ORIGINAL HD CUTOUT (PNG, uncompressed full resolution)
-        const href = resolveAssetUrl(item.processed);
-        const a = document.createElement('a');
-        a.href = href;
-        const cleanBase =
-          (item.downloadName || item.title).replace(/\.[^/.]+$/, '').trim() || 'cutout';
-        a.download = `${cleanBase}-hd-cutout.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // ORIGINAL HD CUTOUT (PNG, full resolution with baked stroke & shadow)
+        let source: string | HTMLCanvasElement = resolveAssetUrl(item.processed);
+
+        if (
+          item.isVideo &&
+          item.mattedFrames &&
+          item.mattedFrames.length > 0 &&
+          item.width &&
+          item.height
+        ) {
+          const canvas = document.createElement('canvas');
+          canvas.width = item.width;
+          canvas.height = item.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const f = item.mattedFrames[0];
+            const clamped = new Uint8ClampedArray(
+              f.buffer as ArrayBuffer,
+              f.byteOffset,
+              f.byteLength
+            );
+            ctx.putImageData(new ImageData(clamped, item.width, item.height), 0, 0);
+            source = canvas;
+          }
+        } else if (item.isVideo && item.thumb) {
+          source = resolveAssetUrl(item.thumb);
+        }
+
+        const res = await createHdCutoutBlob(
+          source,
+          item.downloadName || item.title,
+          stickerEffects
+        );
+        triggerBlobDownload(res.blob, res.filename);
 
         setToast({
           type: 'success',
-          message: `HD вырезка сохранена: ${cleanBase}-hd-cutout.png (полное разрешение, прозрачный PNG).`,
+          message: `HD вырезка сохранена: ${res.filename} (полное разрешение, прозрачный PNG).`,
         });
       }
     } catch (err) {
@@ -540,6 +569,7 @@ export default function App() {
                 altTitle={selectedItem.title}
                 backdrop={backdrop}
                 onChangeBackdrop={setBackdrop}
+                stickerEffects={stickerEffects}
               />
             </div>
 
@@ -554,6 +584,158 @@ export default function App() {
                   <div className="text-xs text-stone-400 font-medium">Скорость алгоритма</div>
                   <div className="text-base font-bold text-stone-900">
                     {selectedItem.speedMs} мс
+                  </div>
+                </div>
+              </div>
+
+              {/* Sticker Style Card (Stroke & Shadow settings) */}
+              <div className="clay-card p-5 rounded-3xl border border-stone-200/60 flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
+                      <Sparkles className="w-3.5 h-3.5 fill-orange-500" />
+                    </div>
+                    <span className="text-xs font-bold text-stone-800">Стиль стикера</span>
+                  </div>
+                  {(stickerEffects.strokeWidth > 0 || stickerEffects.shadowPreset !== 'none') && (
+                    <button
+                      type="button"
+                      onClick={() => setStickerEffects(DEFAULT_STICKER_EFFECTS)}
+                      className="text-[11px] font-medium text-stone-400 hover:text-orange-600 transition-colors"
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </div>
+
+                {/* Section: Stroke Width */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-stone-500">Обводка (контур)</span>
+                    <span className="text-[10px] text-stone-400 font-medium">
+                      {stickerEffects.strokeWidth === 0
+                        ? 'Без обводки'
+                        : `${stickerEffects.strokeWidth} px`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: 'Нет', val: 0 },
+                      { label: '4 px', val: 4 },
+                      { label: '8 px', val: 8 },
+                      { label: '14 px', val: 14 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() =>
+                          setStickerEffects((prev) => ({ ...prev, strokeWidth: opt.val }))
+                        }
+                        className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
+                          stickerEffects.strokeWidth === opt.val
+                            ? 'bg-orange-500 text-white shadow-sm'
+                            : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Section: Stroke Color (only if strokeWidth > 0) */}
+                {stickerEffects.strokeWidth > 0 && (
+                  <div>
+                    <div className="text-[11px] font-semibold text-stone-500 mb-1.5">
+                      Цвет обводки
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {[
+                        { color: '#ffffff', name: 'Белый' },
+                        { color: '#1e293b', name: 'Тёмный' },
+                        { color: '#fbbf24', name: 'Жёлтый' },
+                        { color: '#f43f5e', name: 'Розовый' },
+                        { color: '#38bdf8', name: 'Голубой' },
+                        { color: '#22c55e', name: 'Зелёный' },
+                      ].map((c) => (
+                        <button
+                          key={c.color}
+                          type="button"
+                          onClick={() =>
+                            setStickerEffects((prev) => ({ ...prev, strokeColor: c.color }))
+                          }
+                          title={c.name}
+                          className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                            stickerEffects.strokeColor.toLowerCase() === c.color.toLowerCase()
+                              ? 'scale-125 border-orange-500 shadow-sm'
+                              : 'border-stone-300 hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: c.color }}
+                        />
+                      ))}
+                      <label
+                        title="Выбрать свой цвет"
+                        className="relative w-6 h-6 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                      >
+                        <input
+                          type="color"
+                          value={stickerEffects.strokeColor}
+                          onChange={(e) =>
+                            setStickerEffects((prev) => ({
+                              ...prev,
+                              strokeColor: e.target.value,
+                            }))
+                          }
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                        <div
+                          className="w-full h-full"
+                          style={{
+                            background:
+                              'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Section: Shadow Preset */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-stone-500">Тень</span>
+                    <span className="text-[10px] text-stone-400 font-medium">
+                      {stickerEffects.shadowPreset === 'none'
+                        ? 'Без тени'
+                        : stickerEffects.shadowPreset === 'soft'
+                        ? 'Мягкая'
+                        : stickerEffects.shadowPreset === 'sticker'
+                        ? 'Стикер'
+                        : '3D объём'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'none' as const, label: 'Нет' },
+                      { id: 'soft' as const, label: 'Мягкая' },
+                      { id: 'sticker' as const, label: 'Стикер' },
+                      { id: 'deep3d' as const, label: '3D' },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() =>
+                          setStickerEffects((prev) => ({ ...prev, shadowPreset: s.id }))
+                        }
+                        className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
+                          stickerEffects.shadowPreset === s.id
+                            ? 'bg-orange-500 text-white shadow-sm'
+                            : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
