@@ -1832,23 +1832,27 @@ function stage6UnmixExact(data, width, height, ws, hInward, bgPlane, furCaptureD
         }
 
         if (alpha > 0.03) {
-          const unmixA = alpha < 0.20 ? 0.20 : alpha > 1.0 ? 1.0 : alpha;
-          const invUA = 1 / unmixA;
-          const oneMinus = 1 - unmixA;
-          let uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
-          let uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
-          let uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
-
+          let uR, uG, uB;
           if (bgPlane.isGreenChroma) {
+            // Chromakey: never multiply R/B by 1/alpha to prevent complementary magenta/pink fringe!
+            uR = r;
+            uB = b;
             const maxNonGreen = Math.max(uR, uB);
-            if (uG > maxNonGreen) {
-              uG = (maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25);
-            }
+            const despillG = maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25;
+            uG = g > despillG ? despillG : g;
           } else if (bgPlane.isBlueChroma) {
+            uR = r;
+            uG = g;
             const maxNonBlue = Math.max(uR, uG);
-            if (uB > maxNonBlue) {
-              uB = (maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25);
-            }
+            const despillB = maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25;
+            uB = b > despillB ? despillB : b;
+          } else {
+            const unmixA = alpha < 0.20 ? 0.20 : alpha > 1.0 ? 1.0 : alpha;
+            const invUA = 1 / unmixA;
+            const oneMinus = 1 - unmixA;
+            uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
+            uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
+            uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
           }
 
           const w = isProtectedHumanCloth
@@ -2092,23 +2096,27 @@ function stage6UnmixQuality(data, width, height, ws, hInward, bgPlane, furRing, 
         }
 
         if (alpha > 0.005) {
-          const unmixA = alpha < 0.22 ? 0.22 : alpha > 1.0 ? 1.0 : alpha;
-          const invUA = 1 / unmixA;
-          const oneMinus = 1 - unmixA;
-          let uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
-          let uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
-          let uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
-
+          let uR, uG, uB;
           if (bgPlane.isGreenChroma) {
+            // Chromakey: never multiply R/B by 1/alpha to prevent complementary magenta/pink fringe!
+            uR = r;
+            uB = b;
             const maxNonGreen = Math.max(uR, uB);
-            if (uG > maxNonGreen) {
-              uG = (maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25);
-            }
+            const despillG = maxNonGreen * 0.75 + ((uR + uB) * 0.5) * 0.25;
+            uG = g > despillG ? despillG : g;
           } else if (bgPlane.isBlueChroma) {
+            uR = r;
+            uG = g;
             const maxNonBlue = Math.max(uR, uG);
-            if (uB > maxNonBlue) {
-              uB = (maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25);
-            }
+            const despillB = maxNonBlue * 0.75 + ((uR + uG) * 0.5) * 0.25;
+            uB = b > despillB ? despillB : b;
+          } else {
+            const unmixA = alpha < 0.22 ? 0.22 : alpha > 1.0 ? 1.0 : alpha;
+            const invUA = 1 / unmixA;
+            const oneMinus = 1 - unmixA;
+            uR = clamp((r - oneMinus * bR) * invUA, 0, 255);
+            uG = clamp((g - oneMinus * bG) * invUA, 0, 255);
+            uB = clamp((b - oneMinus * bB) * invUA, 0, 255);
           }
 
           let decR = uR, decG = uG, decB = uB;

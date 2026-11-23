@@ -464,5 +464,47 @@ test('chromakey video frame (16:9 ratio) clears outer and bottom green backdrop'
   assert.equal(out[(cy * w + cx) * 4 + 3], 255, 'cat center must be solid');
 });
 
+test('chromakey de-spill never produces magenta/pink edge artifacts on gray fur', () => {
+  const w = 120, h = 120;
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  // Pure green background
+  for (let i = 0; i < w * h; i++) {
+    const off = i * 4;
+    rgba[off] = 20; rgba[off + 1] = 240; rgba[off + 2] = 20; rgba[off + 3] = 255;
+  }
+  // Gray cat in center: R=100, G=100, B=100 with optical blend on fringe
+  const cx = 60, cy = 60;
+  for (let y = 30; y < 90; y++) {
+    for (let x = 30; x < 90; x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= 24) {
+        const off = (y * w + x) * 4;
+        rgba[off] = 100; rgba[off + 1] = 100; rgba[off + 2] = 100;
+      } else if (d <= 28) {
+        const t = (d - 24) / 4;
+        const off = (y * w + x) * 4;
+        rgba[off] = Math.round(100 * (1 - t) + 20 * t);
+        rgba[off + 1] = Math.round(100 * (1 - t) + 240 * t);
+        rgba[off + 2] = Math.round(100 * (1 - t) + 20 * t);
+      }
+    }
+  }
+
+  const out = sotaCellMattingV5_3_Turbo(rgba, w, h, { qualityEnhancements: true });
+  // Check for magenta edge pixels (R > 130 and B > 130 and G < 100)
+  let magentaCount = 0;
+  for (let i = 0; i < w * h; i++) {
+    const off = i * 4;
+    const r = out[off], g = out[off + 1], b = out[off + 2], a = out[off + 3];
+    if (a > 10 && a < 250) {
+      if (r > g + 40 && b > g + 40) {
+        magentaCount++;
+      }
+    }
+  }
+  assert.equal(magentaCount, 0, `Expected 0 magenta/pink edge artifacts, got ${magentaCount}`);
+});
+
+
 
 
