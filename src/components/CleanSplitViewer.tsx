@@ -3,7 +3,6 @@ import { MoveHorizontal, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { resolveAssetUrl } from '../utils/assetUrl';
 import {
   generateCssStickerFilter,
-  erodeAlpha,
   type StickerEffects,
 } from '../utils/telegramStickerExport';
 
@@ -23,6 +22,7 @@ interface CleanSplitViewerProps {
   backdrop: BackdropColor;
   onChangeBackdrop: (bg: BackdropColor) => void;
   stickerEffects?: StickerEffects;
+  isPaused?: boolean;
 }
 
 export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
@@ -39,6 +39,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
   backdrop,
   onChangeBackdrop,
   stickerEffects,
+  isPaused = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const leftVideoRef = useRef<HTMLVideoElement>(null);
@@ -94,21 +95,31 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Draw single frame cleanly without EVER mutating mattedFrames buffer
+    const drawFrame = (idx: number) => {
+      const f = mattedFrames[idx];
+      if (f) {
+        const imgData = new ImageData(
+          new Uint8ClampedArray(f.buffer.slice(f.byteOffset, f.byteOffset + f.byteLength)),
+          frameWidth,
+          frameHeight
+        );
+        ctx.putImageData(imgData, 0, 0);
+      }
+    };
+
+    // Draw current frame immediately
+    drawFrame(frameIdx);
+
+    // If user is currently dragging effect sliders, freeze playback to eliminate CPU/GPU lag
+    if (isPaused) {
+      return;
+    }
+
     const render = (now: number) => {
       if (now - lastTime >= interval) {
         lastTime = now;
-        const f = mattedFrames[frameIdx];
-        if (f) {
-          const imgData = new ImageData(
-            new Uint8ClampedArray(f.buffer as ArrayBuffer, f.byteOffset, f.byteLength),
-            frameWidth,
-            frameHeight
-          );
-          if (stickerEffects && stickerEffects.strokeInset > 0) {
-            erodeAlpha(imgData, stickerEffects.strokeInset);
-          }
-          ctx.putImageData(imgData, 0, 0);
-        }
+        drawFrame(frameIdx);
         frameIdx = (frameIdx + 1) % mattedFrames.length;
       }
       animId = requestAnimationFrame(render);
@@ -116,13 +127,26 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [hasCanvasFrames, mattedFrames, frameWidth, frameHeight, fps, stickerEffects?.strokeInset]);
+  }, [hasCanvasFrames, mattedFrames, frameWidth, frameHeight, fps, isPaused]);
 
   // Sync video playbacks if in video mode without canvas frames
   useEffect(() => {
     if (!isVideo || hasCanvasFrames) return;
     const v1 = leftVideoRef.current;
     const v2 = rightVideoRef.current;
+
+    if (isPaused) {
+      v1?.pause();
+      v2?.pause();
+      return;
+    }
+
+    if (v1 && v1.paused) {
+      v1.play().catch(() => {});
+    }
+    if (v2 && v2.paused) {
+      v2.play().catch(() => {});
+    }
     if (v1) {
       v1.currentTime = 0;
       v1.play().catch(() => {});

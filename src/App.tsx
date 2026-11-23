@@ -117,6 +117,21 @@ export default function App() {
   const [stickerEffects, setStickerEffects] = useState<StickerEffects>(DEFAULT_STICKER_EFFECTS);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [isAdjustingEffects, setIsAdjustingEffects] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handlePointerUp = () => {
+      setIsAdjustingEffects(false);
+    };
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchend', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('touchend', handlePointerUp);
+    };
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customIdRef = useRef<number>(200);
@@ -570,6 +585,7 @@ export default function App() {
                 backdrop={backdrop}
                 onChangeBackdrop={setBackdrop}
                 stickerEffects={stickerEffects}
+                isPaused={isAdjustingEffects}
               />
             </div>
 
@@ -635,6 +651,8 @@ export default function App() {
                       max="24"
                       step="1"
                       value={stickerEffects.strokeWidth}
+                      onPointerDown={() => setIsAdjustingEffects(true)}
+                      onTouchStart={() => setIsAdjustingEffects(true)}
                       onChange={(e) =>
                         setStickerEffects((prev) => ({
                           ...prev,
@@ -646,11 +664,11 @@ export default function App() {
                   </div>
 
                   {/* Ползунок захода внутрь (на 1-3 пх) */}
-                  <div>
+                  <div className={stickerEffects.strokeWidth === 0 ? 'opacity-40' : ''}>
                     <div className="flex items-center justify-between text-[11px] mb-1">
                       <span className="font-semibold text-stone-500">Заход внутрь (на объект)</span>
                       <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
-                        {stickerEffects.strokeInset} px
+                        {stickerEffects.strokeWidth === 0 ? 0 : stickerEffects.strokeInset} px
                       </span>
                     </div>
                     <input
@@ -658,22 +676,29 @@ export default function App() {
                       min="0"
                       max="3"
                       step="1"
-                      value={stickerEffects.strokeInset}
+                      disabled={stickerEffects.strokeWidth === 0}
+                      value={stickerEffects.strokeWidth === 0 ? 0 : stickerEffects.strokeInset}
+                      onPointerDown={() => setIsAdjustingEffects(true)}
+                      onTouchStart={() => setIsAdjustingEffects(true)}
                       onChange={(e) =>
                         setStickerEffects((prev) => ({
                           ...prev,
                           strokeInset: Number(e.target.value),
                         }))
                       }
-                      className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                      className={`w-full h-1.5 bg-stone-200 rounded-lg appearance-none accent-orange-500 ${
+                        stickerEffects.strokeWidth === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
                     />
                     <div className="text-[10px] text-stone-400 mt-0.5 font-medium">
-                      1–3 px срезает краевые ореолы и плотно стыкует контур
+                      {stickerEffects.strokeWidth === 0
+                        ? 'Включите толщину обводки > 0 px'
+                        : '1–3 px срезает краевые ореолы и плотно стыкует контур'}
                     </div>
                   </div>
 
-                  {/* Цвет обводки (активен при strokeWidth > 0 или strokeInset > 0) */}
-                  {(stickerEffects.strokeWidth > 0 || stickerEffects.strokeInset > 0) && (
+                  {/* Цвет обводки (активен при strokeWidth > 0) */}
+                  {stickerEffects.strokeWidth > 0 && (
                     <div className="mt-1">
                       <div className="text-[11px] font-semibold text-stone-500 mb-1.5">
                         Цвет контура
@@ -681,11 +706,7 @@ export default function App() {
                       <div className="flex items-center gap-2 flex-wrap">
                         {[
                           { color: '#ffffff', name: 'Белый' },
-                          { color: '#1e293b', name: 'Тёмный' },
-                          { color: '#fbbf24', name: 'Жёлтый' },
-                          { color: '#f43f5e', name: 'Розовый' },
-                          { color: '#38bdf8', name: 'Голубой' },
-                          { color: '#22c55e', name: 'Зелёный' },
+                          { color: '#000000', name: 'Чёрный' },
                         ].map((c) => (
                           <button
                             key={c.color}
@@ -694,7 +715,7 @@ export default function App() {
                               setStickerEffects((prev) => ({ ...prev, strokeColor: c.color }))
                             }
                             title={c.name}
-                            className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                            className={`w-6 h-6 rounded-full border-2 transition-transform ${
                               stickerEffects.strokeColor.toLowerCase() === c.color.toLowerCase()
                                 ? 'scale-125 border-orange-500 shadow-sm'
                                 : 'border-stone-300 hover:scale-110'
@@ -704,7 +725,11 @@ export default function App() {
                         ))}
                         <label
                           title="Выбрать свой цвет"
-                          className="relative w-5 h-5 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                          className={`relative w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform overflow-hidden ${
+                            !['#ffffff', '#000000'].includes(stickerEffects.strokeColor.toLowerCase())
+                              ? 'scale-125 border-orange-500 shadow-sm'
+                              : 'border-dashed border-stone-300 hover:border-orange-500 hover:scale-110'
+                          }`}
                         >
                           <input
                             type="color"
@@ -783,6 +808,8 @@ export default function App() {
                           max="35"
                           step="1"
                           value={stickerEffects.shadowBlur}
+                          onPointerDown={() => setIsAdjustingEffects(true)}
+                          onTouchStart={() => setIsAdjustingEffects(true)}
                           onChange={(e) =>
                             setStickerEffects((prev) => ({
                               ...prev,
@@ -807,6 +834,8 @@ export default function App() {
                           max="100"
                           step="5"
                           value={stickerEffects.shadowOpacity}
+                          onPointerDown={() => setIsAdjustingEffects(true)}
+                          onTouchStart={() => setIsAdjustingEffects(true)}
                           onChange={(e) =>
                             setStickerEffects((prev) => ({
                               ...prev,
@@ -838,6 +867,8 @@ export default function App() {
                               max="25"
                               step="1"
                               value={stickerEffects.shadowOffsetY}
+                              onPointerDown={() => setIsAdjustingEffects(true)}
+                              onTouchStart={() => setIsAdjustingEffects(true)}
                               onChange={(e) =>
                                 setStickerEffects((prev) => ({
                                   ...prev,
@@ -866,6 +897,8 @@ export default function App() {
                               max="25"
                               step="1"
                               value={stickerEffects.shadowOffsetX}
+                              onPointerDown={() => setIsAdjustingEffects(true)}
+                              onTouchStart={() => setIsAdjustingEffects(true)}
                               onChange={(e) =>
                                 setStickerEffects((prev) => ({
                                   ...prev,
@@ -886,9 +919,6 @@ export default function App() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {[
                             { color: '#000000', name: 'Чёрный' },
-                            { color: '#1e1b4b', name: 'Индиго' },
-                            { color: '#451a03', name: 'Шоколад' },
-                            { color: '#0f172a', name: 'Графит' },
                           ].map((c) => (
                             <button
                               key={c.color}
@@ -900,7 +930,7 @@ export default function App() {
                                 }))
                               }
                               title={c.name}
-                              className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                              className={`w-6 h-6 rounded-full border-2 transition-transform ${
                                 stickerEffects.shadowColor.toLowerCase() === c.color.toLowerCase()
                                   ? 'scale-125 border-orange-500 shadow-sm'
                                   : 'border-stone-300 hover:scale-110'
@@ -910,7 +940,11 @@ export default function App() {
                           ))}
                           <label
                             title="Выбрать свой оттенок тени"
-                            className="relative w-5 h-5 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                            className={`relative w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform overflow-hidden ${
+                              stickerEffects.shadowColor.toLowerCase() !== '#000000'
+                                ? 'scale-125 border-orange-500 shadow-sm'
+                                : 'border-dashed border-stone-300 hover:border-orange-500 hover:scale-110'
+                            }`}
                           >
                             <input
                               type="color"
