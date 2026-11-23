@@ -397,7 +397,7 @@ export function manhattanDistanceTransform2Pass(dist, width, height, maxDist) {
   return dist;
 }
 
-function buildSubjectInwardDistanceV53(ws, coreBgTol) {
+function buildSubjectInwardDistanceV53(ws, coreBgTol, isChromaBg = false) {
   const {
     width, hw, hh, hTotal,
     distToBg, sat, grad, localTextureClamped,
@@ -426,8 +426,7 @@ function buildSubjectInwardDistanceV53(ws, coreBgTol) {
       const hIdx = hRowOff + hx;
       if (
         distToBg[i] > distThresh ||
-        sat[i] > 16.5 ||
-        hLocalSat[hIdx] > 14.5 ||
+        (!isChromaBg && (sat[i] > 16.5 || hLocalSat[hIdx] > 14.5)) ||
         (grad[i] >= 2.3 && localTextureClamped[i] >= 3.2)
       ) {
         hRawSeed[hIdx] = 1.0;
@@ -723,11 +722,6 @@ function stage0BackgroundCalibration(data, width, height, ws, qualityPlus) {
 
       const sumD = dr + dg + db;
       let satSq = distSq - sumD * sumD * 0.3333333333333333;
-      if (isChromaBg) {
-        const mRGB = (r + g + b) * 0.3333333333333333;
-        const mr = r - mRGB, mg = g - mRGB, mb = b - mRGB;
-        satSq = mr * mr + mg * mg + mb * mb;
-      }
       sat[idx] = satSq > 0 ? Math.sqrt(satSq) : 0;
 
       bR += rStep;
@@ -843,7 +837,8 @@ function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol,
 
   const trySeedExact = (x, y) => {
     const idx = y * width + x;
-    if (bgState[idx] === 0 && distToBg[idx] <= coreBgTol) {
+    const seedTol = isChromaBg ? Math.max(coreBgTol, 20.0) : coreBgTol;
+    if (bgState[idx] === 0 && distToBg[idx] <= seedTol) {
       if (isCustomBackdrop && !isChromaBg && sat[idx] >= 7.5) return;
       if (clothOverexposureGuard && sat[idx] >= 3.2 && distToBg[idx] >= 4.5 && (y >= torsoY || localTextureClamped[idx] >= 2.0)) return;
       bgState[idx] = 1;
@@ -851,7 +846,7 @@ function stage2ExteriorFloodExact(width, height, ws, hInward, coreBgTol, gapTol,
     }
   };
 
-  const seedInsets = Math.min(width, height) >= 600 ? [0, 4, 10, 18, 22] : [0, 2, 4];
+  const seedInsets = Math.min(width, height) >= 600 ? [0, 4, 10, 18, 22] : (isChromaBg ? [0, 2, 4, 8, 14] : [0, 2, 4]);
   for (const ins of seedInsets) {
     const yBot = height - 1 - ins;
     for (let x = ins; x < width - ins; x++) {
@@ -934,13 +929,14 @@ function stage2ExteriorFloodQuality(width, height, ws, hInward, coreBgTol, gapTo
     const d = distToBg[idx];
     const s = sat[idx];
     const texC = localTextureClamped[idx];
-    if (d <= coreBgTol && (isChromaBg || s <= 3.5) && texC < 2.0) return true;
+    const seedTol = isChromaBg ? Math.max(coreBgTol, 20.0) : coreBgTol;
+    if (d <= seedTol && (isChromaBg || s <= 3.5) && texC < 2.0) return true;
     // Also seed glass-smooth neutral studio vignette corners (e.g. bottom corners beside clothing)
     if (!isChromaBg && d <= 54.0 && s <= 3.0 && texC <= 1.85 && grad[idx] <= 4.0) return true;
     return false;
   };
 
-  const seedInsets = Math.min(width, height) >= 600 ? [0, 4, 10, 18, 22] : [0, 2, 4];
+  const seedInsets = Math.min(width, height) >= 600 ? [0, 4, 10, 18, 22] : (isChromaBg ? [0, 2, 4, 8, 14] : [0, 2, 4]);
   for (const ins of seedInsets) {
     const rTop = ins * width;
     const rBot = (height - 1 - ins) * width;
@@ -1196,25 +1192,25 @@ function stage3ExteriorPockets(width, height, ws, hInward, coreBgTol, gapTol, qu
 
         if (px > 0) {
           const nIdx = pIdx - 1;
-          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[phRow + (((px - 1) >> 1) < hw ? ((px - 1) >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket) {
+          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[phRow + (((px - 1) >> 1) < hw ? ((px - 1) >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && (isChromaBg || (sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket))) {
             visited[nIdx] = 1; queue[cTail++] = (py << 16) | (px - 1);
           }
         }
         if (px < maxX) {
           const nIdx = pIdx + 1;
-          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[phRow + (((px + 1) >> 1) < hw ? ((px + 1) >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket) {
+          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[phRow + (((px + 1) >> 1) < hw ? ((px + 1) >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && (isChromaBg || (sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket))) {
             visited[nIdx] = 1; queue[cTail++] = (py << 16) | (px + 1);
           }
         }
         if (py > 0) {
           const nIdx = pIdx - width;
-          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[((((py - 1) >> 1) < hh ? ((py - 1) >> 1) : maxHy) * hw) + ((px >> 1) < hw ? (px >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket) {
+          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[((((py - 1) >> 1) < hh ? ((py - 1) >> 1) : maxHy) * hw) + ((px >> 1) < hw ? (px >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && (isChromaBg || (sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket))) {
             visited[nIdx] = 1; queue[cTail++] = ((py - 1) << 16) | px;
           }
         }
         if (py < maxY) {
           const nIdx = pIdx + width;
-          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[((((py + 1) >> 1) < hh ? ((py + 1) >> 1) : maxHy) * hw) + ((px >> 1) < hw ? (px >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket) {
+          if (!visited[nIdx] && bgState[nIdx] === 0 && hInward[((((py + 1) >> 1) < hh ? ((py + 1) >> 1) : maxHy) * hw) + ((px >> 1) < hw ? (px >> 1) : maxHx)] < inwardPocketCap && distToBg[nIdx] <= pocketTol && (isChromaBg || (sat[nIdx] <= maxSatPocket && localTextureClamped[nIdx] <= maxTexPocket))) {
             visited[nIdx] = 1; queue[cTail++] = ((py + 1) << 16) | px;
           }
         }
@@ -1249,10 +1245,10 @@ function stage3ExteriorPockets(width, height, ws, hInward, coreBgTol, gapTol, qu
         if (strictHumanPockets && !qualityPlus && ((sat[nIdx] >= 3.0 && distToBg[nIdx] >= 3.5) || localTextureClamped[nIdx] >= 2.4)) return;
         const d = distToBg[nIdx];
         if (d <= coreBgTol) {
-          bgState[nIdx] = ((lum[nIdx] - bgLum[nIdx]) > 9.0 && sat[nIdx] < 16 && grad[nIdx] < 9.5 && localTexture[nIdx] >= 2.2) ? 2 : 1;
+          bgState[nIdx] = (!isChromaBg && (lum[nIdx] - bgLum[nIdx]) > 9.0 && sat[nIdx] < 16 && grad[nIdx] < 9.5 && localTexture[nIdx] >= 2.2) ? 2 : 1;
           queue[tail++] = (ny << 16) | nx;
-        } else if (d <= gapTol && grad[nIdx] < 13.5 && sat[nIdx] < 14) {
-          bgState[nIdx] = ((lum[nIdx] - bgLum[nIdx]) > 8.5 && localTexture[nIdx] >= 2.2) ? 2 : 3;
+        } else if (d <= gapTol && grad[nIdx] < 13.5 && (isChromaBg || sat[nIdx] < 14)) {
+          bgState[nIdx] = (!isChromaBg && (lum[nIdx] - bgLum[nIdx]) > 8.5 && localTexture[nIdx] >= 2.2) ? 2 : 3;
           queue[tail++] = (ny << 16) | nx;
         }
       };
@@ -2775,7 +2771,7 @@ export function sotaCellMattingV5_3_Turbo(rgba, width, height, opts = {}) {
   const qFurRing = semanticAdaptive ? (isHuman ? 12 : 11) : 8;
   const qHairDeHazeMaxRing = semanticAdaptive ? semantic.params.hairDeHazeMaxRing : 46;
 
-  const hInward = buildSubjectInwardDistanceV53(ws, bgPlane.coreBgTol);
+  const hInward = buildSubjectInwardDistanceV53(ws, bgPlane.coreBgTol, bgPlane.isChromaBg);
   const t1b = st ? performance.now() : 0;
   if (st) st.stage1b_inward += (t1b - t1Box);
 

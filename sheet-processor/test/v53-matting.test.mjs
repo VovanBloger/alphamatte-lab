@@ -424,4 +424,45 @@ test('green chromakey cuts cleanly with green de-spill on fur fringe while prese
   }
 });
 
+test('chromakey video frame (16:9 ratio) clears outer and bottom green backdrop', () => {
+  const w = 256, h = 144;
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  // Pure green background with slight compression noise
+  for (let i = 0; i < w * h; i++) {
+    const off = i * 4;
+    rgba[off] = 24 + ((i * 7) % 5);
+    rgba[off + 1] = 236 + ((i * 11) % 5);
+    rgba[off + 2] = 20 + ((i * 13) % 4);
+    rgba[off + 3] = 255;
+  }
+
+  // Draw a sitting gray cat in center touching ground near bottom
+  const cx = 128, cy = 80;
+  for (let y = 30; y < 130; y++) {
+    for (let x = 60; x < 196; x++) {
+      const dx = (x - cx) / 45;
+      const dy = (y - cy) / 45;
+      if (dx * dx + dy * dy <= 1.0) {
+        const off = (y * w + x) * 4;
+        rgba[off] = 140;
+        rgba[off + 1] = 135;
+        rgba[off + 2] = 130;
+      }
+    }
+  }
+
+  const out = sotaCellMattingV5_3_Turbo(rgba, w, h, { qualityEnhancements: true });
+
+  // Top corners, bottom corners, and bottom background between subject and frame edge must be cleared
+  assert.equal(out[(4 * w + 4) * 4 + 3], 0, 'top-left background must be cleared');
+  assert.equal(out[(4 * w + (w - 5)) * 4 + 3], 0, 'top-right background must be cleared');
+  assert.equal(out[((h - 5) * w + 4) * 4 + 3], 0, 'bottom-left background must be cleared');
+  assert.equal(out[((h - 5) * w + (w - 5)) * 4 + 3], 0, 'bottom-right background must be cleared');
+  assert.equal(out[((h - 4) * w + cx) * 4 + 3], 0, 'bottom center ground background must be cleared');
+
+  // Cat center must stay 100% solid
+  assert.equal(out[(cy * w + cx) * 4 + 3], 255, 'cat center must be solid');
+});
+
+
 

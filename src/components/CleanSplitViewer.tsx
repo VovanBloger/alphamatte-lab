@@ -50,6 +50,26 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
     origY: 0,
   });
 
+  const [aspect, setAspect] = useState<string>(() => {
+    if (frameWidth && frameHeight) return `${frameWidth} / ${frameHeight}`;
+    return '1 / 1';
+  });
+
+  useEffect(() => {
+    if (frameWidth && frameHeight) {
+      setAspect(`${frameWidth} / ${frameHeight}`);
+    }
+  }, [frameWidth, frameHeight]);
+
+  const handleMediaLoad = (e: React.SyntheticEvent<HTMLImageElement | HTMLVideoElement>) => {
+    const el = e.currentTarget;
+    const w = 'naturalWidth' in el ? el.naturalWidth : ('videoWidth' in el ? el.videoWidth : 0);
+    const h = 'naturalHeight' in el ? el.naturalHeight : ('videoHeight' in el ? el.videoHeight : 0);
+    if (w > 0 && h > 0 && (!frameWidth || !frameHeight)) {
+      setAspect(`${w} / ${h}`);
+    }
+  };
+
   const hasCanvasFrames = Boolean(mattedFrames && mattedFrames.length > 0 && frameWidth && frameHeight);
 
   // Canvas loop for custom video / GIF frames with 100% alpha transparency
@@ -191,8 +211,8 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative w-full aspect-square max-h-[64vh] rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(45,35,20,0.12)] border border-white/80 select-none cursor-ew-resize bg-stone-100"
-        style={{ touchAction: 'none' }}
+        className="relative w-full max-h-[64vh] rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(45,35,20,0.12)] border border-white/80 select-none cursor-ew-resize bg-stone-100"
+        style={{ touchAction: 'none', aspectRatio: aspect }}
       >
         {/* Transform container for Zoom & Pan */}
         <div
@@ -218,12 +238,14 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
                 loop
                 muted
                 playsInline
+                onLoadedMetadata={handleMediaLoad}
                 className="w-full h-full object-contain pointer-events-none"
               />
             ) : (
               <img
                 src={resolvedProcessed}
                 alt={`${altTitle} без фона`}
+                onLoad={handleMediaLoad}
                 className="w-full h-full object-contain pointer-events-none"
                 draggable={false}
               />
@@ -244,6 +266,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
                 <img
                   src={resolvedOrig}
                   alt={`${altTitle} оригинал`}
+                  onLoad={handleMediaLoad}
                   className="w-full h-full object-contain pointer-events-none"
                   draggable={false}
                 />
@@ -255,12 +278,14 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
                   loop
                   muted
                   playsInline
+                  onLoadedMetadata={handleMediaLoad}
                   className="w-full h-full object-contain pointer-events-none"
                 />
               ) : (
                 <img
                   src={resolvedOrig}
                   alt={`${altTitle} оригинал`}
+                  onLoad={handleMediaLoad}
                   className="w-full h-full object-contain pointer-events-none"
                   draggable={false}
                 />
