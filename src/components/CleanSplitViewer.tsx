@@ -93,7 +93,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
         const f = mattedFrames[frameIdx];
         if (f) {
           const imgData = new ImageData(
-            new Uint8ClampedArray(f.buffer, f.byteOffset, f.byteLength),
+            new Uint8ClampedArray(f.buffer as ArrayBuffer, f.byteOffset, f.byteLength),
             frameWidth,
             frameHeight
           );

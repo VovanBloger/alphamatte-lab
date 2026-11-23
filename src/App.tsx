@@ -18,6 +18,10 @@ import {
   processCustomVideoOrGifFile,
 } from './utils/customPhotoRunner';
 import { resolveAssetUrl } from './utils/assetUrl';
+import {
+  createTelegramWebpStickerBlob,
+  triggerBlobDownload,
+} from './utils/telegramStickerExport';
 
 export interface FeaturedItem {
   id: number;
@@ -106,7 +110,8 @@ export default function App() {
   const [backdrop, setBackdrop] = useState<BackdropColor>('checker');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingStatus, setProcessingStatus] = useState<string>('Обработка...');
-  const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +120,7 @@ export default function App() {
   const handleSelectExample = (ex: FeaturedItem) => {
     setSelectedItem(ex);
     setBackdrop('checker');
+    setToast(null);
   };
 
   const handleUploadFiles = async (fileList: FileList | File[]) => {
@@ -122,7 +128,10 @@ export default function App() {
       (f) => f.type.startsWith('image/') || f.type.startsWith('video/') || isVideoOrGifFile(f)
     );
     if (files.length === 0) {
-      setErrorToast('Пожалуйста, выберите фото (PNG, JPEG, WebP) или видео/GIF (MP4, GIF).');
+      setToast({
+        type: 'error',
+        message: 'Пожалуйста, выберите фото (PNG, JPEG, WebP) или видео/GIF (MP4, GIF).',
+      });
       return;
     }
 
@@ -130,7 +139,7 @@ export default function App() {
     const isVid = isVideoOrGifFile(file);
     setIsProcessing(true);
     setProcessingStatus(isVid ? 'Подготовка видео → WebM...' : 'Удаление фона AlphaMatte...');
-    setErrorToast(null);
+    setToast(null);
 
     const t0 = performance.now();
     try {
@@ -163,7 +172,7 @@ export default function App() {
         width: cell.width,
         height: cell.height,
         fps: cell.fps || 20,
-        speedMs: cell.v53QualMs > 0 ? Math.round(cell.v53QualMs) : (cell.v53Ms > 0 ? Math.round(cell.v53Ms) : elapsed),
+        speedMs: cell.v53QualMs > 0 ? Math.round(cell.v53QualMs) : elapsed,
         badge: isActuallyVideo ? `${cell.frameCount || 1} кадров · ${cell.fps || 20} FPS` : `${elapsed} мс`,
         description: isActuallyVideo
           ? `Видео/GIF (${cell.frameCount || 1} кадров, ${cell.width}×${cell.height} px, ${cell.fps || 20} FPS)`
@@ -177,21 +186,104 @@ export default function App() {
       setSelectedItem(customItem);
       setBackdrop('checker');
     } catch (err) {
-      setErrorToast(err instanceof Error ? err.message : 'Ошибка при обработке изображения');
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Ошибка при обработке изображения',
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleDownload = (item: FeaturedItem, format: 'hd' | 'webp' = 'hd') => {
-    const isWebm = item.isVideo || item.downloadType === 'video/webm';
-    const href = resolveAssetUrl(item.processed);
-    const a = document.createElement('a');
-    a.href = href;
-    a.download = format === 'webp' ? item.downloadName.replace(/\.(png|webm)$/, '.webp') : item.downloadName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async (
+    item: FeaturedItem,
+    format: 'tg-sticker' | 'tg-webm' | 'hd-png'
+  ) => {
+    setIsExporting(true);
+    setToast(null);
+
+    try {
+      if (format === 'tg-sticker') {
+        // STATIC TELEGRAM STICKER (.WEBP, 512px max side, <= 512 KB)
+        let source: string | HTMLCanvasElement = resolveAssetUrl(item.processed);
+
+        if (
+          item.isVideo &&
+          item.mattedFrames &&
+          item.mattedFrames.length > 0 &&
+          item.width &&
+          item.height
+        ) {
+          const canvas = document.createElement('canvas');
+          canvas.width = item.width;
+          canvas.height = item.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const f = item.mattedFrames[0];
+            const clamped = new Uint8ClampedArray(
+              f.buffer as ArrayBuffer,
+              f.byteOffset,
+              f.byteLength
+            );
+            ctx.putImageData(new ImageData(clamped, item.width, item.height), 0, 0);
+            source = canvas;
+          }
+        } else if (item.isVideo && item.thumb) {
+          source = resolveAssetUrl(item.thumb);
+        }
+
+        const res = await createTelegramWebpStickerBlob(
+          source,
+          item.downloadName || item.title
+        );
+        triggerBlobDownload(res.blob, res.filename);
+
+        setToast({
+          type: 'success',
+          message: `Стикер Telegram готов: ${res.filename} (${res.width}×${res.height} px, ${(res.sizeBytes / 1024).toFixed(1)} КБ) — подходит для бота @Stickers!`,
+        });
+      } else if (format === 'tg-webm') {
+        // VIDEO TELEGRAM STICKER (.WEBM VP9, 512px max side, <= 256 KB, <= 3.0s, no audio)
+        const href = resolveAssetUrl(item.processed);
+        const a = document.createElement('a');
+        a.href = href;
+        const cleanBase =
+          (item.downloadName || item.title).replace(/\.[^/.]+$/, '').trim() ||
+          'video-sticker';
+        a.download = `${cleanBase}-tg-sticker.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setToast({
+          type: 'success',
+          message: `Видео-стикер Telegram готов: ${cleanBase}-tg-sticker.webm (VP9, без звука, ≤ 256 КБ) — готов для @Stickers!`,
+        });
+      } else {
+        // ORIGINAL HD CUTOUT (PNG, uncompressed full resolution)
+        const href = resolveAssetUrl(item.processed);
+        const a = document.createElement('a');
+        a.href = href;
+        const cleanBase =
+          (item.downloadName || item.title).replace(/\.[^/.]+$/, '').trim() || 'cutout';
+        a.download = `${cleanBase}-hd-cutout.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setToast({
+          type: 'success',
+          message: `HD вырезка сохранена: ${cleanBase}-hd-cutout.png (полное разрешение, прозрачный PNG).`,
+        });
+      }
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Ошибка при экспорте стикера',
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -302,14 +394,29 @@ export default function App() {
           </div>
         )}
 
-        {/* Error Toast */}
-        {errorToast && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium max-w-md w-full shadow-sm flex items-center justify-between gap-3">
-            <span>{errorToast}</span>
+        {/* Notification Toast */}
+        {toast && (
+          <div
+            className={`mb-6 p-4 rounded-2xl border text-xs font-medium max-w-xl w-full shadow-sm flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200 ${
+              toast.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {toast.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <span className="w-4 h-4 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                  ✕
+                </span>
+              )}
+              <span>{toast.message}</span>
+            </div>
             <button
               type="button"
-              onClick={() => setErrorToast(null)}
-              className="text-rose-500 hover:text-rose-700 font-bold"
+              onClick={() => setToast(null)}
+              className="text-stone-400 hover:text-stone-700 font-bold ml-2 shrink-0 p-1"
             >
               ✕
             </button>
@@ -451,31 +558,71 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Download Buttons Card */}
+              {/* Download Buttons Card (Compliant with Telegram @Stickers specs) */}
               <div className="clay-card p-6 rounded-3xl border border-stone-200/60 flex flex-col gap-3">
-                {/* Primary Button */}
-                <button
-                  type="button"
-                  onClick={() => handleDownload(selectedItem, 'hd')}
-                  className="clay-button-primary w-full py-3.5 px-5 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>
-                    {selectedItem.isVideo ? 'Скачать стикер (WebM)' : 'Скачать HD'}
-                  </span>
-                </button>
+                {selectedItem.isVideo ? (
+                  <>
+                    {/* Primary: WebM Video Sticker */}
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      onClick={() => handleDownload(selectedItem, 'tg-webm')}
+                      className="clay-button-primary w-full py-3.5 px-5 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-transform active:scale-98"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>{isExporting ? 'Экспорт...' : 'Скачать видео-стикер (WebM)'}</span>
+                    </button>
+                    <div className="text-[10px] text-stone-400 text-center -mt-1 font-medium">
+                      Для Telegram @Stickers · 512px · VP9 · ≤ 256 КБ · без звука
+                    </div>
 
-                {/* Secondary Button */}
-                <button
-                  type="button"
-                  onClick={() => handleDownload(selectedItem, 'webp')}
-                  className="clay-button-secondary w-full py-2.5 px-5 rounded-2xl text-stone-700 font-semibold text-xs flex items-center justify-center gap-2"
-                >
-                  <span>Скачать WebP</span>
-                </button>
+                    {/* Secondary: Frame 0 as Static 512px WebP Sticker */}
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      onClick={() => handleDownload(selectedItem, 'tg-sticker')}
+                      className="clay-button-secondary w-full py-2.5 px-5 rounded-2xl text-stone-700 font-semibold text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition-transform active:scale-98"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+                      <span>Скачать кадр как стикер (WebP 512px)</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Primary: 512px Transparent WebP Sticker for Telegram */}
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      onClick={() => handleDownload(selectedItem, 'tg-sticker')}
+                      className="clay-button-primary w-full py-3.5 px-5 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-transform active:scale-98"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>
+                        {isExporting ? 'Подготовка WebP...' : 'Скачать стикер для Telegram (WebP)'}
+                      </span>
+                    </button>
+                    <div className="text-[10px] text-stone-400 text-center -mt-1 font-medium">
+                      Для Telegram @Stickers · строго 512px · WebP · ≤ 512 КБ
+                    </div>
+
+                    {/* Secondary: Original Full-Res HD Cutout PNG */}
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      onClick={() => handleDownload(selectedItem, 'hd-png')}
+                      className="clay-button-secondary w-full py-2.5 px-5 rounded-2xl text-stone-700 font-semibold text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition-transform active:scale-98"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-stone-500" />
+                      <span>Скачать HD без фона (PNG)</span>
+                    </button>
+                    <div className="text-[10px] text-stone-400 text-center -mt-1 font-medium">
+                      Оригинальное разрешение (для дизайна и печати)
+                    </div>
+                  </>
+                )}
 
                 {/* Info Text */}
-                <div className="text-[11px] text-stone-400 text-center mt-1">
+                <div className="text-[11px] text-stone-400 text-center mt-2 border-t border-stone-100 pt-2">
                   {selectedItem.description}
                 </div>
               </div>

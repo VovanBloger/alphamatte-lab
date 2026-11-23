@@ -30,7 +30,7 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test sheet-processor/test/processor.test.mjs sheet-processor/test/realism-regression.test.mjs sheet-processor/test/component-seams-regression.test.mjs sheet-processor/test/v53-matting.test.mjs",
+    "test": "node --test sheet-processor/test/processor.test.mjs sheet-processor/test/realism-regression.test.mjs sheet-processor/test/component-seams-regression.test.mjs sheet-processor/test/v53-matting.test.mjs sheet-processor/test/telegram-sticker-export.test.mjs",
     "bench": "node scripts/benchmark-compare.mjs",
     "video-matte": "node scripts/video-matting-cli.mjs",
     "lint": "tsc --noEmit"

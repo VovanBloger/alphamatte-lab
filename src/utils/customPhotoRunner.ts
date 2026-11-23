@@ -1,4 +1,5 @@
 import type { CellMetric } from '../types/bench';
+import { calculateTelegramDimensions } from './telegramStickerExport';
 
 let sharedWorker: Worker | null = null;
 let jobCounter = 1;
@@ -221,7 +222,7 @@ async function encodeMattedFramesToTransparentWebm(
   const stream = canvas.captureStream(fps);
   const recorder = new MediaRecorder(stream, {
     mimeType: selectedMime,
-    videoBitsPerSecond: 2_500_000,
+    videoBitsPerSecond: 550_000, // 550 kbps ensures 3-second WebM is <= 256 KB (Telegram limit)
   });
 
   const chunks: BlobPart[] = [];
@@ -280,9 +281,9 @@ export async function processCustomVideoOrGifFile(
     const firstFrame = await decoder.decode({ frameIndex: 0 });
     const srcW = firstFrame.image.displayWidth || firstFrame.image.codedWidth || 512;
     const srcH = firstFrame.image.displayHeight || firstFrame.image.codedHeight || 512;
-    const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
-    width = Math.max(64, Math.round(srcW * scale)) & ~1;
-    height = Math.max(64, Math.round(srcH * scale)) & ~1;
+    const tgDims = calculateTelegramDimensions(srcW, srcH, true);
+    width = tgDims.width;
+    height = tgDims.height;
     const durUs = firstFrame.image.duration || 50_000;
     fps = Math.min(30, Math.max(10, Math.round(1_000_000 / Math.max(20_000, durUs))));
 
@@ -320,12 +321,12 @@ export async function processCustomVideoOrGifFile(
 
     const srcW = video.videoWidth || 512;
     const srcH = video.videoHeight || 512;
-    const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
-    width = Math.max(64, Math.round(srcW * scale)) & ~1;
-    height = Math.max(64, Math.round(srcH * scale)) & ~1;
+    const tgDims = calculateTelegramDimensions(srcW, srcH, true);
+    width = tgDims.width;
+    height = tgDims.height;
     fps = 20;
-    const duration = Number.isFinite(video.duration) && video.duration > 0 ? Math.min(video.duration, 3.5) : 2.5;
-    const totalFrames = Math.min(70, Math.max(2, Math.round(duration * fps)));
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? Math.min(video.duration, 3.0) : 2.5;
+    const totalFrames = Math.min(60, Math.max(2, Math.round(duration * fps)));
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
