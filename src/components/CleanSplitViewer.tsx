@@ -1,7 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { MoveHorizontal, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { resolveAssetUrl } from '../utils/assetUrl';
-import { generateCssStickerFilter, type StickerEffects } from '../utils/telegramStickerExport';
+import {
+  generateCssStickerFilter,
+  erodeAlpha,
+  type StickerEffects,
+} from '../utils/telegramStickerExport';
 
 export type BackdropColor = 'checker' | 'dark' | 'white' | 'green';
 
@@ -100,6 +104,9 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
             frameWidth,
             frameHeight
           );
+          if (stickerEffects && stickerEffects.strokeInset > 0) {
+            erodeAlpha(imgData, stickerEffects.strokeInset);
+          }
           ctx.putImageData(imgData, 0, 0);
         }
         frameIdx = (frameIdx + 1) % mattedFrames.length;
@@ -109,7 +116,7 @@ export const CleanSplitViewer: React.FC<CleanSplitViewerProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [hasCanvasFrames, mattedFrames, frameWidth, frameHeight, fps]);
+  }, [hasCanvasFrames, mattedFrames, frameWidth, frameHeight, fps, stickerEffects?.strokeInset]);
 
   // Sync video playbacks if in video mode without canvas frames
   useEffect(() => {

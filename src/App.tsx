@@ -588,8 +588,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sticker Style Card (Stroke & Shadow settings) */}
-              <div className="clay-card p-5 rounded-3xl border border-stone-200/60 flex flex-col gap-3.5">
+              {/* Sticker Style Card (Stroke & Shadow settings with sliders) */}
+              <div className="clay-card p-5 rounded-3xl border border-stone-200/60 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
@@ -597,7 +597,9 @@ export default function App() {
                     </div>
                     <span className="text-xs font-bold text-stone-800">Стиль стикера</span>
                   </div>
-                  {(stickerEffects.strokeWidth > 0 || stickerEffects.shadowPreset !== 'none') && (
+                  {(stickerEffects.strokeWidth > 0 ||
+                    stickerEffects.strokeInset > 0 ||
+                    stickerEffects.shadowType !== 'none') && (
                     <button
                       type="button"
                       onClick={() => setStickerEffects(DEFAULT_STICKER_EFFECTS)}
@@ -608,135 +610,331 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Section: Stroke Width */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold text-stone-500">Обводка (контур)</span>
-                    <span className="text-[10px] text-stone-400 font-medium">
+                {/* 1. БЛОК ОБВОДКИ (С ПОЛЗУНКАМИ) */}
+                <div className="flex flex-col gap-2.5 border-b border-stone-100 pb-3.5">
+                  <div className="text-[11px] font-bold text-stone-700 uppercase tracking-wider flex items-center justify-between">
+                    <span>Обводка (контур)</span>
+                    <span className="font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full text-[10px]">
                       {stickerEffects.strokeWidth === 0
-                        ? 'Без обводки'
+                        ? 'Выкл'
                         : `${stickerEffects.strokeWidth} px`}
                     </span>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
+
+                  {/* Ползунок толщины обводки */}
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="font-semibold text-stone-500">Толщина</span>
+                      <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                        {stickerEffects.strokeWidth} px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="24"
+                      step="1"
+                      value={stickerEffects.strokeWidth}
+                      onChange={(e) =>
+                        setStickerEffects((prev) => ({
+                          ...prev,
+                          strokeWidth: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                    />
+                  </div>
+
+                  {/* Ползунок захода внутрь (на 1-3 пх) */}
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="font-semibold text-stone-500">Заход внутрь (на объект)</span>
+                      <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                        {stickerEffects.strokeInset} px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="3"
+                      step="1"
+                      value={stickerEffects.strokeInset}
+                      onChange={(e) =>
+                        setStickerEffects((prev) => ({
+                          ...prev,
+                          strokeInset: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                    />
+                    <div className="text-[10px] text-stone-400 mt-0.5 font-medium">
+                      1–3 px срезает краевые ореолы и плотно стыкует контур
+                    </div>
+                  </div>
+
+                  {/* Цвет обводки (активен при strokeWidth > 0 или strokeInset > 0) */}
+                  {(stickerEffects.strokeWidth > 0 || stickerEffects.strokeInset > 0) && (
+                    <div className="mt-1">
+                      <div className="text-[11px] font-semibold text-stone-500 mb-1.5">
+                        Цвет контура
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {[
+                          { color: '#ffffff', name: 'Белый' },
+                          { color: '#1e293b', name: 'Тёмный' },
+                          { color: '#fbbf24', name: 'Жёлтый' },
+                          { color: '#f43f5e', name: 'Розовый' },
+                          { color: '#38bdf8', name: 'Голубой' },
+                          { color: '#22c55e', name: 'Зелёный' },
+                        ].map((c) => (
+                          <button
+                            key={c.color}
+                            type="button"
+                            onClick={() =>
+                              setStickerEffects((prev) => ({ ...prev, strokeColor: c.color }))
+                            }
+                            title={c.name}
+                            className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                              stickerEffects.strokeColor.toLowerCase() === c.color.toLowerCase()
+                                ? 'scale-125 border-orange-500 shadow-sm'
+                                : 'border-stone-300 hover:scale-110'
+                            }`}
+                            style={{ backgroundColor: c.color }}
+                          />
+                        ))}
+                        <label
+                          title="Выбрать свой цвет"
+                          className="relative w-5 h-5 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                        >
+                          <input
+                            type="color"
+                            value={stickerEffects.strokeColor}
+                            onChange={(e) =>
+                              setStickerEffects((prev) => ({
+                                ...prev,
+                                strokeColor: e.target.value,
+                              }))
+                            }
+                            className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                          />
+                          <div
+                            className="w-full h-full"
+                            style={{
+                              background:
+                                'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. БЛОК ТЕНИ (РЕЖИМЫ И ПОЛЗУНКИ) */}
+                <div className="flex flex-col gap-2.5">
+                  <div className="text-[11px] font-bold text-stone-700 uppercase tracking-wider">
+                    Тень
+                  </div>
+
+                  {/* Переключатель режимов: Без тени / Вокруг объекта / 3D тень */}
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-stone-100 rounded-2xl">
                     {[
-                      { label: 'Нет', val: 0 },
-                      { label: '4 px', val: 4 },
-                      { label: '8 px', val: 8 },
-                      { label: '14 px', val: 14 },
-                    ].map((opt) => (
+                      { id: 'none' as const, label: 'Без тени' },
+                      { id: 'around' as const, label: 'Вокруг' },
+                      { id: '3d' as const, label: '3D тень' },
+                    ].map((tab) => (
                       <button
-                        key={opt.val}
+                        key={tab.id}
                         type="button"
                         onClick={() =>
-                          setStickerEffects((prev) => ({ ...prev, strokeWidth: opt.val }))
+                          setStickerEffects((prev) => ({
+                            ...prev,
+                            shadowType: tab.id,
+                            shadowBlur: prev.shadowBlur || 16,
+                            shadowOpacity: prev.shadowOpacity || 35,
+                            shadowOffsetY: tab.id === '3d' ? prev.shadowOffsetY || 12 : 0,
+                          }))
                         }
-                        className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
-                          stickerEffects.strokeWidth === opt.val
-                            ? 'bg-orange-500 text-white shadow-sm'
-                            : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700'
+                        className={`py-1 px-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+                          stickerEffects.shadowType === tab.id
+                            ? 'bg-white text-orange-600 shadow-sm'
+                            : 'text-stone-500 hover:text-stone-800'
                         }`}
                       >
-                        {opt.label}
+                        {tab.label}
                       </button>
                     ))}
                   </div>
-                </div>
 
-                {/* Section: Stroke Color (only if strokeWidth > 0) */}
-                {stickerEffects.strokeWidth > 0 && (
-                  <div>
-                    <div className="text-[11px] font-semibold text-stone-500 mb-1.5">
-                      Цвет обводки
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {[
-                        { color: '#ffffff', name: 'Белый' },
-                        { color: '#1e293b', name: 'Тёмный' },
-                        { color: '#fbbf24', name: 'Жёлтый' },
-                        { color: '#f43f5e', name: 'Розовый' },
-                        { color: '#38bdf8', name: 'Голубой' },
-                        { color: '#22c55e', name: 'Зелёный' },
-                      ].map((c) => (
-                        <button
-                          key={c.color}
-                          type="button"
-                          onClick={() =>
-                            setStickerEffects((prev) => ({ ...prev, strokeColor: c.color }))
-                          }
-                          title={c.name}
-                          className={`w-6 h-6 rounded-full border-2 transition-transform ${
-                            stickerEffects.strokeColor.toLowerCase() === c.color.toLowerCase()
-                              ? 'scale-125 border-orange-500 shadow-sm'
-                              : 'border-stone-300 hover:scale-110'
-                          }`}
-                          style={{ backgroundColor: c.color }}
-                        />
-                      ))}
-                      <label
-                        title="Выбрать свой цвет"
-                        className="relative w-6 h-6 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
-                      >
+                  {/* Настройки тени (показываются, когда shadowType !== 'none') */}
+                  {stickerEffects.shadowType !== 'none' && (
+                    <div className="flex flex-col gap-2.5 mt-1">
+                      {/* Ползунок: Размытие */}
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="font-semibold text-stone-500">Размытие (мягкость)</span>
+                          <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                            {stickerEffects.shadowBlur} px
+                          </span>
+                        </div>
                         <input
-                          type="color"
-                          value={stickerEffects.strokeColor}
+                          type="range"
+                          min="0"
+                          max="35"
+                          step="1"
+                          value={stickerEffects.shadowBlur}
                           onChange={(e) =>
                             setStickerEffects((prev) => ({
                               ...prev,
-                              strokeColor: e.target.value,
+                              shadowBlur: Number(e.target.value),
                             }))
                           }
-                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                          className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
                         />
-                        <div
-                          className="w-full h-full"
-                          style={{
-                            background:
-                              'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
+                      </div>
 
-                {/* Section: Shadow Preset */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold text-stone-500">Тень</span>
-                    <span className="text-[10px] text-stone-400 font-medium">
-                      {stickerEffects.shadowPreset === 'none'
-                        ? 'Без тени'
-                        : stickerEffects.shadowPreset === 'soft'
-                        ? 'Мягкая'
-                        : stickerEffects.shadowPreset === 'sticker'
-                        ? 'Стикер'
-                        : '3D объём'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { id: 'none' as const, label: 'Нет' },
-                      { id: 'soft' as const, label: 'Мягкая' },
-                      { id: 'sticker' as const, label: 'Стикер' },
-                      { id: 'deep3d' as const, label: '3D' },
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() =>
-                          setStickerEffects((prev) => ({ ...prev, shadowPreset: s.id }))
-                        }
-                        className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
-                          stickerEffects.shadowPreset === s.id
-                            ? 'bg-orange-500 text-white shadow-sm'
-                            : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
+                      {/* Ползунок: Непрозрачность */}
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="font-semibold text-stone-500">Непрозрачность</span>
+                          <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                            {stickerEffects.shadowOpacity}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="5"
+                          max="100"
+                          step="5"
+                          value={stickerEffects.shadowOpacity}
+                          onChange={(e) =>
+                            setStickerEffects((prev) => ({
+                              ...prev,
+                              shadowOpacity: Number(e.target.value),
+                            }))
+                          }
+                          className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                        />
+                      </div>
+
+                      {/* Ползунки смещения для 3D тени */}
+                      {stickerEffects.shadowType === '3d' && (
+                        <>
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1">
+                              <span className="font-semibold text-stone-500">
+                                Смещение Y (по вертикали)
+                              </span>
+                              <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                                {stickerEffects.shadowOffsetY > 0
+                                  ? `+${stickerEffects.shadowOffsetY}`
+                                  : stickerEffects.shadowOffsetY}{' '}
+                                px
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="-25"
+                              max="25"
+                              step="1"
+                              value={stickerEffects.shadowOffsetY}
+                              onChange={(e) =>
+                                setStickerEffects((prev) => ({
+                                  ...prev,
+                                  shadowOffsetY: Number(e.target.value),
+                                }))
+                              }
+                              className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1">
+                              <span className="font-semibold text-stone-500">
+                                Смещение X (по горизонтали)
+                              </span>
+                              <span className="font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
+                                {stickerEffects.shadowOffsetX > 0
+                                  ? `+${stickerEffects.shadowOffsetX}`
+                                  : stickerEffects.shadowOffsetX}{' '}
+                                px
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="-25"
+                              max="25"
+                              step="1"
+                              value={stickerEffects.shadowOffsetX}
+                              onChange={(e) =>
+                                setStickerEffects((prev) => ({
+                                  ...prev,
+                                  shadowOffsetX: Number(e.target.value),
+                                }))
+                              }
+                              className="w-full h-1.5 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* Цвет тени */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-stone-500 mb-1.5">
+                          Цвет тени
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {[
+                            { color: '#000000', name: 'Чёрный' },
+                            { color: '#1e1b4b', name: 'Индиго' },
+                            { color: '#451a03', name: 'Шоколад' },
+                            { color: '#0f172a', name: 'Графит' },
+                          ].map((c) => (
+                            <button
+                              key={c.color}
+                              type="button"
+                              onClick={() =>
+                                setStickerEffects((prev) => ({
+                                  ...prev,
+                                  shadowColor: c.color,
+                                }))
+                              }
+                              title={c.name}
+                              className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                                stickerEffects.shadowColor.toLowerCase() === c.color.toLowerCase()
+                                  ? 'scale-125 border-orange-500 shadow-sm'
+                                  : 'border-stone-300 hover:scale-110'
+                              }`}
+                              style={{ backgroundColor: c.color }}
+                            />
+                          ))}
+                          <label
+                            title="Выбрать свой оттенок тени"
+                            className="relative w-5 h-5 rounded-full border-2 border-dashed border-stone-300 hover:border-orange-500 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                          >
+                            <input
+                              type="color"
+                              value={stickerEffects.shadowColor}
+                              onChange={(e) =>
+                                setStickerEffects((prev) => ({
+                                  ...prev,
+                                  shadowColor: e.target.value,
+                                }))
+                              }
+                              className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                            />
+                            <div
+                              className="w-full h-full"
+                              style={{
+                                background:
+                                  'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
